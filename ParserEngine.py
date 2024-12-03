@@ -1,6 +1,7 @@
 import json
 import os
 import string
+from dataclasses import dataclass
 from itertools import chain
 from multiprocessing import Pool
 from threading import Thread
@@ -14,35 +15,34 @@ from openpyxl.styles.differential import DifferentialStyle
 from openpyxl.workbook import Workbook
 
 
-class ParserEngine:
-    config = "config.json"
-    green = "19CF1F"
-    red = "E81737"
-    title = "Анализ"
-    fileName = "data.xlsx"
-    colWidth = 45
-    cellWidth = 13
-    diffWidth = 9
+@dataclass
+class Settings:
+    __slots__ = ["green", "red", "title", "fileName", "colWidth", "cellWidth", "diffWidth"]
+    green: str
+    red: str
+    title: str
+    fileName: str
+    colWidth: int
+    cellWidth: int
+    diffWidth: int
 
-    @classmethod
-    def start(cls, entries: List[Tuple[str, int]], done: Callable):
-        thread = Thread(target=cls.process, args=(entries, done))
+
+class ParserEngine:
+    __slots__ = ["config", "settings", "profiles", "cookies"]
+
+    def __init__(self, config):
+        self.config = config
+        with open(config, "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+            self.settings = Settings(**loaded["settings"])
+            self.profiles: dict[str, dict[str, str]] = loaded["profiles"]
+            self.cookies: dict[str, dict[str, str]] = {"cookies": loaded["cookies"], "data": loaded["data"]}
+
+    def start(self, entries: List[Tuple[str, int]], done: Callable):
+        thread = Thread(target=self.process, args=(entries, done))
         thread.start()
 
-    @staticmethod
-    def save(data):
-        with open("data.json", "w", encoding="utf-8") as outfile:
-            json.dump(data, outfile)
-
-    @classmethod
-    def load(cls):
-        if not os.path.exists(cls.config):
-            return None
-        with open(cls.config, "r") as infile:
-            return json.load(infile)
-
-    @staticmethod
-    def download(target: int, limit: int = 5000):
+    def download(self, target: int, limit: int = 5000):
         request = requests.post(
             "https://tabletka.by/ajax-request/reload-pharmacy-price",
             headers={
@@ -56,21 +56,20 @@ class ParserEngine:
                 "host": "tabletka.by",
             },
             data={
-                "_csrf": "Your _csrt",
+                **self.cookies["data"],
                 "id": target,
                 "page": "0",
                 "sort": "name",
                 "sort_type": "asc"
             },
             cookies={
-                # Your cookies
+                **self.cookies["cookies"],
                 "lim-result": str(limit)
             }
         )
         return json.loads(request.content)["data"]
 
-    @staticmethod
-    def parse(file: str):
+    def parse(self, file: str):
         soup = BeautifulSoup(file, 'lxml')
         names = [x.text + ", " + y.text for x, y in zip(
             soup.select("div[class=tooltip-info-header] > a"),
@@ -81,22 +80,19 @@ class ParserEngine:
         entry = {name: float(price) for name, price in zip(names, prices)}
         return entry
 
-    @classmethod
-    def process(cls, entries: List[Tuple[str, int]], done: Callable):
+    def process(self, entries: List[Tuple[str, int]], done: Callable):
         codes = [y for x, y in entries]
         titles = [x for x, y in entries]
         with Pool(len(codes)) as pool:
-            pages = pool.map(cls.download, codes)
+            pages = pool.map(self.download, codes)
         with Pool(len(codes)) as pool:
-            parse_res = pool.map(cls.parse, pages)
+            parse_res = pool.map(self.parse, pages)
         data = dict(zip(codes, parse_res))
         data["titles"] = {y: x for x, y in entries}
-        cls.save(data)
-        cls.excel_export(codes, titles, data)
+        self.excel_export(codes, titles, data)
         done()
 
-    @classmethod
-    def excel_export(cls, codes: List[int], titles: List[str], data):
+    def excel_export(self, codes: List[int], titles: List[str], data):
         wb = Workbook()
         grid = [
             ["Название", titles[0]] +
@@ -114,15 +110,15 @@ class ParserEngine:
             row = [x] + prices
             grid.append(row)
         ws = wb.active
-        ws.title = cls.title
+        ws.title = self.settings.title
         for x in string.ascii_uppercase:
-            ws.column_dimensions[x].width = cls.cellWidth
+            ws.column_dimensions[x].width = self.settings.cellWidth
         for x in string.ascii_uppercase[3::2]:
-            ws.column_dimensions[x].width = cls.diffWidth
-        ws.column_dimensions["A"].width = cls.colWidth
+            ws.column_dimensions[x].width = self.settings.diffWidth
+        ws.column_dimensions["A"].width = self.settings.colWidth
 
         for x in string.ascii_uppercase[3::2]:
-            red_cell, green_cell = PatternFill(bgColor=cls.red), PatternFill(bgColor=cls.green)
+            red_cell, green_cell = PatternFill(bgColor=self.settings.red), PatternFill(bgColor=self.settings.green)
             dxf_red, dxf_green = DifferentialStyle(fill=red_cell), DifferentialStyle(fill=green_cell)
             rule_less = Rule("cellIs", operator="lessThan", formula=["0"], dxf=dxf_red)
             rule_higher = Rule("cellIs", operator="greaterThan", formula=["0"], dxf=dxf_green)
@@ -131,4 +127,4 @@ class ParserEngine:
         ws.auto_filter.ref = f"A1:{string.ascii_uppercase[len(grid[0]) - 1]}{len(grid)}"
 
         [ws.append(x) for x in grid]
-        wb.save(cls.fileName)
+        wb.save(self.settings.fileName)
