@@ -1,9 +1,11 @@
 import json
 import os
 from dataclasses import asdict
+from time import sleep
 
 from customtkinter import CTk, CTkButton, CTkEntry, CTkProgressBar, CTkSegmentedButton
 
+from ButtonInjector import run
 from ParserEngine import ParserEngine
 
 
@@ -107,6 +109,7 @@ class ProfileSelector(CTkSegmentedButton):
 class App(CTk):
     __slots__ = ["progress", "profiles", "current_profile", "engine", "selector", "add_profile_button",
                  "delete_profile_button"]
+    processing: bool = False
 
     def __init__(self):
         super().__init__()
@@ -142,6 +145,9 @@ class App(CTk):
             self.current_profile.delete_entry()
 
     def click(self):
+        if self.processing:
+            return
+        self.processing = True
         self.engine.start(
             [(entry.get_text(), int(entry.get_url().split("/")[-1])) for entry in self.current_profile.entries],
             self.done)
@@ -155,9 +161,10 @@ class App(CTk):
         self.progress.start()
 
     def done(self):
+        self.processing = False
         self.progress.stop()
-        self.progress.destroy()
-        os.startfile(os.path.abspath(os.getcwd()) + f"\\{self.engine.settings.fileName}")
+        self.progress.grid_forget()
+        os.startfile(os.path.abspath(os.getcwd()) + f"\\{self.engine.settings.fileName.replace("xlsx", "xlsm")}")
 
     def on_closing(self):
         config = {

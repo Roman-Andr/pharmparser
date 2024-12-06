@@ -7,12 +7,16 @@ from multiprocessing import Pool
 from threading import Thread
 from typing import List, Tuple, Callable
 
+import psutil
 import requests
 from bs4 import BeautifulSoup
 from openpyxl.formatting import Rule
 from openpyxl.styles import PatternFill
 from openpyxl.styles.differential import DifferentialStyle
+from openpyxl.utils import get_column_letter
 from openpyxl.workbook import Workbook
+
+from ButtonInjector import run
 
 
 @dataclass
@@ -43,6 +47,7 @@ class ParserEngine:
         thread.start()
 
     def download(self, target: int, limit: int = 5000):
+        psutil.Process(os.getpid()).nice(psutil.HIGH_PRIORITY_CLASS)
         request = requests.post(
             "https://tabletka.by/ajax-request/reload-pharmacy-price",
             headers={
@@ -70,6 +75,7 @@ class ParserEngine:
         return json.loads(request.content)["data"]
 
     def parse(self, file: str):
+        psutil.Process(os.getpid()).nice(psutil.HIGH_PRIORITY_CLASS)
         soup = BeautifulSoup(file, 'lxml')
         names = [x.text + ", " + y.text for x, y in zip(
             soup.select("div[class=tooltip-info-header] > a"),
@@ -93,11 +99,12 @@ class ParserEngine:
         done()
 
     def excel_export(self, codes: List[int], titles: List[str], data):
+        offset = 2
         wb = Workbook()
-        grid = [
-            ["Название", titles[0]] +
-            list(chain(*[[titles[i + 1], "Разница"] for i, x in enumerate(codes) if x != codes[-1]]))]
-        names = sorted(list(set(chain(*[list(data[x].keys()) for x in codes]))), key=lambda k: k[0])
+        grid = [*([] for _ in range(offset)),
+                ["Название", titles[0]] +
+                list(chain(*[[titles[i + 1], "Разница"] for i, x in enumerate(codes) if x != codes[-1]]))]
+        names = sorted(list(set(chain(*[list(data[x].keys()) for x in codes]))), key=lambda k: k.lower())
         for x in names:
             prices = []
             for y in codes:
@@ -122,9 +129,10 @@ class ParserEngine:
             dxf_red, dxf_green = DifferentialStyle(fill=red_cell), DifferentialStyle(fill=green_cell)
             rule_less = Rule("cellIs", operator="lessThan", formula=["0"], dxf=dxf_red)
             rule_higher = Rule("cellIs", operator="greaterThan", formula=["0"], dxf=dxf_green)
-            [ws.conditional_formatting.add(f"{x}2:{x}{len(grid)}", rule) for rule in (rule_less, rule_higher)]
+            [ws.conditional_formatting.add(f"{x}{2 + offset}:{x}{len(grid)}", rule) for rule in (rule_less, rule_higher)]
 
-        ws.auto_filter.ref = f"A1:{string.ascii_uppercase[len(grid[0]) - 1]}{len(grid)}"
+        ws.auto_filter.ref = f"A{1 + offset}:{get_column_letter(len(grid[0 + offset]))}{len(grid)}"
 
         [ws.append(x) for x in grid]
         wb.save(self.settings.fileName)
+        run(len(grid[0 + offset]))
