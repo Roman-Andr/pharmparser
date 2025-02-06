@@ -1,7 +1,6 @@
 import json
 import os
 import string
-from dataclasses import dataclass
 from itertools import chain
 from multiprocessing import Pool
 from threading import Thread
@@ -17,18 +16,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.workbook import Workbook
 
 from ButtonInjector import run
-
-
-@dataclass
-class Settings:
-    __slots__ = ["green", "red", "title", "fileName", "colWidth", "cellWidth", "diffWidth"]
-    green: str
-    red: str
-    title: str
-    fileName: str
-    colWidth: int
-    cellWidth: int
-    diffWidth: int
+from settings import Settings
 
 
 class ParserEngine:
@@ -117,7 +105,7 @@ class ParserEngine:
             row = [x] + prices
             grid.append(row)
         ws = wb.active
-        ws.title = self.settings.title
+        ws.title = self.settings.data_title
         for x in string.ascii_uppercase:
             ws.column_dimensions[x].width = self.settings.cellWidth
         for x in string.ascii_uppercase[3::2]:
@@ -135,5 +123,12 @@ class ParserEngine:
         ws.auto_filter.ref = f"A{1 + offset}:{get_column_letter(len(grid[0 + offset]))}{len(grid)}"
 
         [ws.append(x) for x in grid]
+
+        ws = wb.create_sheet(title=self.settings.title)
+        grid = [
+            ["Асортимент", ],
+            ["Позиций ниже всех", ],
+        ]
+
         wb.save(self.settings.fileName)
         run(len(grid[0 + offset]))
