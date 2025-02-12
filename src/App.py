@@ -5,7 +5,8 @@ from dataclasses import asdict
 from customtkinter import CTk, CTkButton, CTkProgressBar
 
 from ParserEngine import ParserEngine
-from Profile import Profile, ProfileSelector
+from Profile import Profile
+from ProfileSelector import ProfileSelector
 
 
 class App(CTk):
@@ -73,13 +74,12 @@ class App(CTk):
         config = {
             "profiles": {},
             "settings": asdict(self.engine.settings),
-            "data": self.engine.cookies["data"],
-            "cookies": self.engine.cookies["cookies"]
+            "request": asdict(self.engine.request)
         }
 
         for i, profile in enumerate(self.profiles):
             config["profiles"][f"Profile {i + 1}"] = {entry.get_text(): entry.get_url() for entry in profile.entries}
 
         with open(self.engine.config, "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=4)
+            json.dump(config, f, ensure_ascii=False, indent=2)
         self.destroy()
