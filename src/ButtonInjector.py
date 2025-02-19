@@ -1,19 +1,24 @@
 import os
-from typing import List
+import shutil
+from itertools import chain
 
 import pythoncom
 import win32com.client as win32
 from openpyxl.utils import get_column_letter
+from win32api import RGB
 from win32com.client import CDispatch
 
+from ApplyFiltersMacro import ApplyFiltersMacro
 from Button import Button
 from FilterCriteria import FilterCriteria
-from Macro import Macro, ApplyFiltersMacro, RemoveFiltersMacro, SortMacro
+from Macro import Macro
+from RemoveFiltersMacro import RemoveFiltersMacro
+from SortMacro import SortMacro
 from SortOrder import SortOrder
 
 
 class ButtonInjector:
-    def __init__(self, file_path, *buttons):
+    def __init__(self, file_path, buttons):
         self.file_path = file_path
         pythoncom.CoInitialize()
         self.excel: CDispatch = win32.gencache.EnsureDispatch('Excel.Application')
@@ -23,7 +28,7 @@ class ButtonInjector:
         self.buttons = []
 
         self.open_workbook()
-        self.add_buttons(*buttons)
+        self.buttons.extend(buttons)
 
     def open_workbook(self):
         self.workbook = self.excel.Workbooks.Open(os.path.abspath(self.file_path))
@@ -40,10 +45,6 @@ class ButtonInjector:
             self.workbook.SaveAs(os.path.abspath(new_file_path), FileFormat=52)
         self.close_workbook()
 
-    def add_buttons(self, *buttons):
-        for button in buttons:
-            self.buttons.append(button)
-
     def generate_vba_code(self):
         for button in self.buttons:
             button.create(self.worksheet)
@@ -56,6 +57,10 @@ def run(column):
     file_path = 'data.xlsx'
     target = 'data.xlsm'
 
+    cache_dir = os.path.join(os.environ.get('LOCALAPPDATA'), 'Temp', 'gen_py')
+    if os.path.exists(cache_dir):
+        shutil.rmtree(cache_dir)
+
     if os.path.exists(target):
         os.remove(target)
 
@@ -64,16 +69,20 @@ def run(column):
 
     buttons = [
         Button('A1', 'Apply Filters',
-               ApplyFiltersMacro(end_column, FilterCriteria.GREATER_THAN_ZERO)),
+               ApplyFiltersMacro(end_column, FilterCriteria.GREATER_THAN_ZERO),
+               back_color=RGB(18, 230, 89),
+               fore_color=RGB(18, 230, 89)),
         Button('A2', 'Remove Filters',
-               RemoveFiltersMacro(end_column))
+               RemoveFiltersMacro(end_column),
+               back_color=RGB(230, 64, 18),
+               fore_color=RGB(230, 64, 18)),
+        *chain(*[[Button(f'{col}1', '↑', SortMacro(col, SortOrder.DESCENDING)),
+                  Button(f'{col}2', '↓', SortMacro(col, SortOrder.ASCENDING))]
+                 for col in [get_column_letter(x) for x in range(4, end_column + 2, 2)]])
     ]
-    columns = [get_column_letter(x) for x in range(4, end_column + 2, 2)]
-    for col in columns:
-        buttons.append(Button(f'{col}2', '↓',
-                              SortMacro(col, SortOrder.ASCENDING)))
-        buttons.append(Button(f'{col}1', '↑',
-                              SortMacro(col, SortOrder.DESCENDING)))
 
-    injector = ButtonInjector(file_path, *buttons)
+    injector = ButtonInjector(file_path, buttons)
     injector.save(target)
+
+    if os.path.exists(file_path):
+        os.remove(file_path)

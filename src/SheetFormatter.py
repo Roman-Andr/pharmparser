@@ -8,6 +8,8 @@ from settings import Settings
 
 
 class SheetFormatter(ABC):
+    __slots__ = ["settings", "titles", "data", "title"]
+
     def __init__(self, settings: Settings, data: DataType, titles: List[str]):
         self.settings = settings
         self.title = None
