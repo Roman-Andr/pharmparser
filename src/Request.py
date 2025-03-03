@@ -17,7 +17,6 @@ class Request:
     def fetch(self, target):
         psutil.Process(os.getpid()).nice(psutil.HIGH_PRIORITY_CLASS)
 
-        raise Exception("Not implemented")
         conn = http.client.HTTPSConnection("tabletka.by")
 
         conn.request(
