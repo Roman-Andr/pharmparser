@@ -2,11 +2,12 @@ from .Macro import Macro
 
 
 class SortMacro(Macro):
-    def __init__(self, column, sort_order):
+    def __init__(self, column, sort_order, sheet_name=""):
         self.column = column
         self.sort_order = sort_order
+        self.sheet_name = sheet_name
         code_template = """
-        Sub Sort{sort_name}{column}()
+        Sub Sort{sort_name}{column}_{sheet_name}()
             Application.ScreenUpdating = False
             {position_code_block}
             ActiveSheet.Range("{data_range}").Sort Key1:=ActiveSheet.Columns("{column}"), Order1:={sort_order}, Header:=xlYes
@@ -14,7 +15,7 @@ class SortMacro(Macro):
             Application.ScreenUpdating = True
         End Sub
         """
-        super().__init__(f'Sort{sort_order.name}{column}', code_template)
+        super().__init__(f'Sort{sort_order.name}{column}_{sheet_name}', code_template)
 
     def get_code(self):
         position_code_block = "\n".join([code for code, _ in self.position_codes])
@@ -26,5 +27,6 @@ class SortMacro(Macro):
             column=self.column,
             sort_order=self.sort_order.value,
             sort_name=self.sort_order.name,
-            data_range=data_range
+            data_range=data_range,
+            sheet_name=self.sheet_name
         )

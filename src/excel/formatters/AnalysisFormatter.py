@@ -12,7 +12,6 @@ from .BaseFormatter import BaseFormatter
 class AnalysisFormatter(BaseFormatter):
     def __init__(self, settings: Settings, data: DataType, titles: List[str]):
         super().__init__(settings, data, titles)
-        self.title = "Анализ"
 
     def format(self, ws: Worksheet):
         title = self.titles[0]

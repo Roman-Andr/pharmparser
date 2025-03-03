@@ -46,19 +46,20 @@ class ParserEngine:
         return self.request.fetch(code)
 
     def process(self, entries: List[Tuple[str, int]], done: Callable):
-        try:
-            codes = [y for x, y in entries]
-            titles = [x for x, y in entries]
-            with Pool(len(codes)) as pool:
-                pages = pool.map(self.download, codes)
-            with Pool(len(pages)) as pool:
-                parse_res = pool.map(self.parse, pages)
-            data = dict(zip(titles, parse_res))
-            Spreadsheet(data, self.settings, [
-                DataFormatter,
-                AnalysisFormatter
-            ]).export(titles, data)
-            done()
-        except Exception as e:
-            self.errors.append(e)
-            done(False)
+        # try:
+        codes = [y for x, y in entries]
+        titles = [x for x, y in entries]
+        with Pool(len(codes)) as pool:
+            pages = pool.map(self.download, codes)
+        with Pool(len(pages)) as pool:
+            parse_res = pool.map(self.parse, pages)
+        data = dict(zip(titles, parse_res))
+        Spreadsheet(data, self.settings, [
+            (DataFormatter, "Данные"),
+            (DataFormatter, "Данные2"),
+            (AnalysisFormatter, "Анализ")
+        ]).export(titles, data)
+        done()
+        # except Exception as e:
+        #     self.errors.append(e)
+        #     done(False)

@@ -6,8 +6,8 @@ class Macro(ABC):
     start_row = 3
     end_row = 100000
 
-    def __init__(self, name, code_template):
-        self.name = name
+    def __init__(self, name, code_template, sheet_name=""):
+        self.name = f"{name}_{sheet_name}" if sheet_name else name
         self.code_template = code_template
         self.position_codes = []
 

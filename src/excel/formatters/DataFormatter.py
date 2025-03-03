@@ -15,7 +15,6 @@ from .BaseFormatter import BaseFormatter
 class DataFormatter(BaseFormatter):
     def __init__(self, settings: Settings, data: DataType, titles: List[str]):
         super().__init__(settings, data, titles)
-        self.title = "Данные"
 
     def format(self, ws: Worksheet):
         offset = 2
