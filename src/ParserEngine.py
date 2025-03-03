@@ -7,18 +7,19 @@ from typing import List, Tuple, Callable
 import psutil
 from bs4 import BeautifulSoup
 
+from AnalysisFormatter import AnalysisFormatter
+from DataFormatter import DataFormatter
 from Request import Request
 from Spreadsheet import Spreadsheet
 from settings import Settings
-from AnalysisFormatter import AnalysisFormatter
-from DataFormatter import DataFormatter
 
 
 class ParserEngine:
-    __slots__ = ["config", "settings", "profiles", "request"]
+    __slots__ = ["config", "settings", "profiles", "request", "errors"]
 
     def __init__(self, config):
         self.config = config
+        self.errors = []
         with open(config, "r", encoding="utf-8") as f:
             loaded = json.load(f)
             self.settings = Settings(**loaded["settings"])
@@ -45,15 +46,19 @@ class ParserEngine:
         return self.request.fetch(code)
 
     def process(self, entries: List[Tuple[str, int]], done: Callable):
-        codes = [y for x, y in entries]
-        titles = [x for x, y in entries]
-        with Pool(len(codes)) as pool:
-            pages = pool.map(self.download, codes)
-        with Pool(len(pages)) as pool:
-            parse_res = pool.map(self.parse, pages)
-        data = dict(zip(titles, parse_res))
-        Spreadsheet(data, self.settings, [
-            DataFormatter,
-            AnalysisFormatter
-        ]).export(titles, data)
-        done()
+        try:
+            codes = [y for x, y in entries]
+            titles = [x for x, y in entries]
+            with Pool(len(codes)) as pool:
+                pages = pool.map(self.download, codes)
+            with Pool(len(pages)) as pool:
+                parse_res = pool.map(self.parse, pages)
+            data = dict(zip(titles, parse_res))
+            Spreadsheet(data, self.settings, [
+                DataFormatter,
+                AnalysisFormatter
+            ]).export(titles, data)
+            done()
+        except Exception as e:
+            self.errors.append(e)
+            done(False)

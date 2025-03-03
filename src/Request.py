@@ -1,28 +1,35 @@
+import http.client
 import json
 import os
+import urllib.parse
 from dataclasses import dataclass
 
 import psutil
-import requests
 
 
 @dataclass
 class Request:
-    __slots__ = ["url", "headers", "cookies", "data"]
+    __slots__ = ["url", "headers", "data"]
     url: str
     headers: dict[str, str]
-    cookies: dict[str, str]
     data: dict[str, str]
 
     def fetch(self, target):
         psutil.Process(os.getpid()).nice(psutil.HIGH_PRIORITY_CLASS)
-        request = requests.post(
-            self.url,
-            headers=self.headers,
-            cookies=self.cookies,
-            data={
+
+        raise Exception("Not implemented")
+        conn = http.client.HTTPSConnection("tabletka.by")
+
+        conn.request(
+            "POST",
+            "/ajax-request/reload-pharmacy-price/",
+            body=urllib.parse.urlencode({
                 "id": int(target),
                 **self.data
-            }
+            }),
+            headers=self.headers,
         )
-        return json.loads(request.content)["data"]
+
+        response = conn.getresponse().read().decode()
+        conn.close()
+        return json.loads(response)["data"]

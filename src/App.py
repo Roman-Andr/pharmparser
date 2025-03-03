@@ -3,7 +3,7 @@ import os
 from dataclasses import asdict
 
 from customtkinter import CTk, CTkButton, CTkProgressBar
-
+from CTkMessagebox import CTkMessagebox
 from ParserEngine import ParserEngine
 from Profile import Profile
 from ProfileSelector import ProfileSelector
@@ -52,23 +52,31 @@ class App(CTk):
         if self.processing:
             return
         self.processing = True
-        self.engine.start(
-            [(entry.get_text(), int(entry.get_url().split("/")[-1])) for entry in self.current_profile.entries],
-            self.done)
-        self.progress.grid(row=sum([len(p.entries) for p in self.profiles]) + 1,
-                           column=0,
-                           columnspan=3,
-                           padx=(20, 10),
-                           pady=(10, 10),
-                           sticky="ew")
-        self.progress.configure(mode="indeterminate")
-        self.progress.start()
+        try:
+            self.engine.start(
+                [(entry.get_text(), int(entry.get_url().split("/")[-1])) for entry in self.current_profile.entries],
+                self.done)
+            self.progress.grid(row=sum([len(p.entries) for p in self.profiles]) + 1,
+                               column=0,
+                               columnspan=3,
+                               padx=(20, 10),
+                               pady=(10, 10),
+                               sticky="ew")
+            self.progress.configure(mode="indeterminate")
+            self.progress.start()
+        except Exception as e:
+            self.done(False)
+            CTkMessagebox(title="Error", message=f"An error occurred: {str(e)}", icon="cancel")
 
-    def done(self):
+    def done(self, status=True):
         self.processing = False
         self.progress.stop()
         self.progress.grid_forget()
-        os.startfile(os.path.abspath(os.getcwd()) + f"\\{self.engine.settings.fileName.replace("xlsx", "xlsm")}")
+        if status:
+            os.startfile(os.path.abspath(os.getcwd()) + f"\\{self.engine.settings.fileName.replace("xlsx", "xlsm")}")
+        else:
+            for e in self.engine.errors:
+                CTkMessagebox(title="Error", message=f"An error occurred: {str(e)}\n\n{e}", icon="cancel")
 
     def on_closing(self):
         config = {
