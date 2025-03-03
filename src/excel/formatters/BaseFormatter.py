@@ -7,7 +7,7 @@ from src.utils import DataType
 from src.utils import Settings
 
 
-class SheetFormatter(ABC):
+class BaseFormatter(ABC):
     __slots__ = ["settings", "titles", "data", "title"]
 
     def __init__(self, settings: Settings, data: DataType, titles: List[str]):

@@ -9,10 +9,10 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
 from src.utils import DataType, Settings
-from .SheetFormatter import SheetFormatter
+from .BaseFormatter import BaseFormatter
 
 
-class DataFormatter(SheetFormatter):
+class DataFormatter(BaseFormatter):
     def __init__(self, settings: Settings, data: DataType, titles: List[str]):
         super().__init__(settings, data, titles)
         self.title = "Данные"

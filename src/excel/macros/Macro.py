@@ -4,7 +4,7 @@ from abc import abstractmethod, ABC
 class Macro(ABC):
     start_col = 4
     start_row = 3
-    end_row = 100
+    end_row = 100000
 
     def __init__(self, name, code_template):
         self.name = name

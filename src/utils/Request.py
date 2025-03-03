@@ -1,4 +1,4 @@
-import http.client
+from http.client import HTTPSConnection
 import json
 import os
 import urllib.parse
@@ -17,7 +17,7 @@ class Request:
     def fetch(self, target):
         psutil.Process(os.getpid()).nice(psutil.HIGH_PRIORITY_CLASS)
 
-        conn = http.client.HTTPSConnection("tabletka.by")
+        conn = HTTPSConnection("tabletka.by")
 
         conn.request(
             "POST",

@@ -6,10 +6,10 @@ from numpy import mean
 from openpyxl.worksheet.worksheet import Worksheet
 
 from src.utils import DataType, Settings
-from .SheetFormatter import SheetFormatter
+from .BaseFormatter import BaseFormatter
 
 
-class AnalysisFormatter(SheetFormatter):
+class AnalysisFormatter(BaseFormatter):
     def __init__(self, settings: Settings, data: DataType, titles: List[str]):
         super().__init__(settings, data, titles)
         self.title = "Анализ"
