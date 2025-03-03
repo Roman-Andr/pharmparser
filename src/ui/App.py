@@ -2,11 +2,12 @@ import json
 import os
 from dataclasses import asdict
 
-from customtkinter import CTk, CTkButton, CTkProgressBar
 from CTkMessagebox import CTkMessagebox
-from ParserEngine import ParserEngine
-from Profile import Profile
-from ProfileSelector import ProfileSelector
+from customtkinter import CTk, CTkButton, CTkProgressBar
+
+from src.core import ParserEngine
+from .Profile import Profile
+from .ProfileSelector import ProfileSelector
 
 
 class App(CTk):

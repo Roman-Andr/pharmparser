@@ -2,10 +2,10 @@ from typing import List, Type
 
 from openpyxl.workbook import Workbook
 
-from ButtonInjector import run
-from SheetFormatter import SheetFormatter
-from datatypes import DataType
-from settings import Settings
+from .formatters import SheetFormatter
+from .macros.ButtonInjector import run
+from ..utils import DataType
+from ..utils import Settings
 
 
 class Spreadsheet:

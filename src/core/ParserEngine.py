@@ -7,11 +7,11 @@ from typing import List, Tuple, Callable
 import psutil
 from bs4 import BeautifulSoup
 
-from AnalysisFormatter import AnalysisFormatter
-from DataFormatter import DataFormatter
-from Request import Request
-from Spreadsheet import Spreadsheet
-from settings import Settings
+from src.excel import AnalysisFormatter
+from src.excel import DataFormatter
+from src.excel import Spreadsheet
+from src.utils import Request
+from src.utils import Settings
 
 
 class ParserEngine:

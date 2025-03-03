@@ -8,13 +8,9 @@ from openpyxl.utils import get_column_letter
 from win32api import RGB
 from win32com.client import CDispatch
 
-from ApplyFiltersMacro import ApplyFiltersMacro
-from Button import Button
-from FilterCriteria import FilterCriteria
-from Macro import Macro
-from RemoveFiltersMacro import RemoveFiltersMacro
-from SortMacro import SortMacro
-from SortOrder import SortOrder
+from src.utils import FilterCriteria
+from src.utils import SortOrder
+from . import *
 
 
 class ButtonInjector:

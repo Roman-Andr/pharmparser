@@ -1,6 +1,6 @@
 from customtkinter import CTkSegmentedButton
 
-from Profile import Profile
+from . import *
 
 
 class ProfileSelector(CTkSegmentedButton):

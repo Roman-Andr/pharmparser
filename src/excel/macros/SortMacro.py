@@ -1,4 +1,4 @@
-from Macro import Macro
+from .Macro import Macro
 
 
 class SortMacro(Macro):

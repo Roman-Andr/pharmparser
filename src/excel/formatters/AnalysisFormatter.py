@@ -5,9 +5,8 @@ from typing import List
 from numpy import mean
 from openpyxl.worksheet.worksheet import Worksheet
 
-from SheetFormatter import SheetFormatter
-from datatypes import DataType
-from settings import Settings
+from src.utils import DataType, Settings
+from .SheetFormatter import SheetFormatter
 
 
 class AnalysisFormatter(SheetFormatter):
