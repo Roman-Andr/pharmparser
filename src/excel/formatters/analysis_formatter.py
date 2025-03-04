@@ -6,7 +6,7 @@ from numpy import mean
 from openpyxl.worksheet.worksheet import Worksheet
 
 from src.utils import DataType, Settings
-from .BaseFormatter import BaseFormatter
+from .base_formatter import BaseFormatter
 
 
 class AnalysisFormatter(BaseFormatter):

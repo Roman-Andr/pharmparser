@@ -6,8 +6,8 @@ from CTkMessagebox import CTkMessagebox
 from customtkinter import CTk, CTkButton, CTkProgressBar
 
 from src.core import ParserEngine
-from .Profile import Profile
-from .ProfileSelector import ProfileSelector
+from .profile import Profile
+from .profile_selector import ProfileSelector
 
 
 class App(CTk):

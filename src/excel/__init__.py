@@ -1,5 +1,5 @@
-from .Spreadsheet import Spreadsheet
+from .spreadsheet import Spreadsheet
 from .formatters import DataFormatter, AnalysisFormatter
-from .macros import ButtonInjector
+from .macros import button_injector
 
-__all__ = ["Spreadsheet", "DataFormatter", "AnalysisFormatter", "ButtonInjector"]
+__all__ = ["Spreadsheet", "DataFormatter", "AnalysisFormatter", "button_injector.py"]

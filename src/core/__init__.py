@@ -1,3 +1,3 @@
-from .ParserEngine import ParserEngine
+from .parser_engine import ParserEngine
 
 __all__ = ["ParserEngine"]

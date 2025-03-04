@@ -10,7 +10,7 @@ from src.utils import DataType, FilterCriteria, SortOrder, Settings
 from .formatters import DataFormatter
 from .formatters import BaseFormatter
 from .macros import Button, ApplyFiltersMacro, SortMacro, RemoveFiltersMacro
-from .macros.ButtonInjector import ButtonInjector
+from .macros.button_injector import ButtonInjector
 from ..utils.utils import remove
 
 

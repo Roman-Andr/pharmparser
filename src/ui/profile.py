@@ -1,4 +1,4 @@
-from .Entry import Entry
+from .entry import Entry
 
 
 class Profile:
