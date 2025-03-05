@@ -13,8 +13,9 @@ from .base_formatter import BaseFormatter
 
 
 class DataFormatter(BaseFormatter):
-    def __init__(self, settings: Settings, data: DataType, titles: List[str]):
+    def __init__(self, settings: Settings, data: DataType, titles: List[str], formatting):
         super().__init__(settings, data, titles)
+        self.formatting = formatting
 
     def format(self, ws: Worksheet):
         offset = 2
@@ -32,7 +33,7 @@ class DataFormatter(BaseFormatter):
                 if (price2 == "Нет" or price1 == "Нет") and y != codes[0]:
                     prices.append(0)
                 elif y != self.titles[0]:
-                    prices.append(float(f"{float(f'{(float(price2) - float(price1)):.2f}'):+}"))
+                    prices.append(float(f"{float(f'{self.formatting(float(price1), float(price2)):.2f}'):+}"))
             row = [x] + prices
             grid.append(row)
         for x in string.ascii_uppercase:
@@ -49,6 +50,6 @@ class DataFormatter(BaseFormatter):
             [ws.conditional_formatting.add(f"{x}{2 + offset}:{x}{len(grid)}", rule) for rule in
              (rule_less, rule_higher)]
 
-        ws.auto_filter.ref = f"A{1 + offset}:{get_column_letter(len(grid[0 + offset]))}{len(grid)}"
+        ws.auto_filter.ref = f"A{1 + offset}:{get_column_letter(len(grid[offset]))}{len(grid)}"
 
         [ws.append(x) for x in grid]

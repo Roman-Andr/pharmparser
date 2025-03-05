@@ -1,9 +1,12 @@
+from openpyxl.utils import get_column_letter
+
 from .macro import Macro
 
 
 class SortMacro(Macro):
-    def __init__(self, column, sort_order, sheet_name=""):
+    def __init__(self, column, end_column, sort_order, sheet_name=""):
         self.column = column
+        self.end_column = end_column
         self.sort_order = sort_order
         self.sheet_name = sheet_name
         code_template = """
@@ -20,7 +23,7 @@ class SortMacro(Macro):
     def get_code(self):
         position_code_block = "\n".join([code for code, _ in self.position_codes])
         restore_code_block = "\n".join([code for _, code in self.position_codes])
-        data_range = f"A{Macro.start_row}:T{Macro.end_row}"
+        data_range = f"A{Macro.start_row}:{get_column_letter(self.end_column)}{Macro.end_row}"
         return self.code_template.format(
             position_code_block=position_code_block,
             restore_code_block=restore_code_block,

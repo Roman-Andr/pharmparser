@@ -1,8 +1,8 @@
-from http.client import HTTPSConnection
 import json
 import os
 import urllib.parse
 from dataclasses import dataclass
+from http.client import HTTPSConnection
 
 import psutil
 
@@ -15,7 +15,7 @@ class Request:
     data: dict[str, str]
 
     def fetch(self, target):
-        psutil.Process(os.getpid()).nice(psutil.HIGH_PRIORITY_CLASS)
+        psutil.Process(os.getpid()).nice(psutil.REALTIME_PRIORITY_CLASS)
 
         conn = HTTPSConnection("tabletka.by")
 
