@@ -8,7 +8,7 @@ from openpyxl.styles.differential import DifferentialStyle
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
-from src.utils import DataType, Settings
+from utils import DataType, Settings
 from .base_formatter import BaseFormatter
 
 

@@ -6,12 +6,12 @@ from openpyxl.utils import get_column_letter
 from openpyxl.workbook import Workbook
 from win32api import RGB
 
-from src.utils import DataType, FilterCriteria, SortOrder, Settings
+from utils import DataType, FilterCriteria, SortOrder, Settings
 from .formatters import DataFormatter
 from .formatters import BaseFormatter
 from .macros import Button, ApplyFiltersMacro, SortMacro, RemoveFiltersMacro
 from .macros.button_injector import ButtonInjector
-from ..utils.utils import remove
+from utils.utils import remove
 
 
 class Spreadsheet:

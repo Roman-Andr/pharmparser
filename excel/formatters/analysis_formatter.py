@@ -5,7 +5,7 @@ from typing import List
 from numpy import mean
 from openpyxl.worksheet.worksheet import Worksheet
 
-from src.utils import DataType, Settings
+from utils import DataType, Settings
 from .base_formatter import BaseFormatter
 
 

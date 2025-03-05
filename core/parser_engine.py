@@ -1,17 +1,13 @@
 import json
 import os
 from multiprocessing import Pool
-from threading import Thread
-from typing import List, Tuple, Callable
+from typing import List, Tuple, Dict
 
 import psutil
 from bs4 import BeautifulSoup
 
-from src.excel import AnalysisFormatter
-from src.excel import DataFormatter
-from src.excel import Spreadsheet
-from src.utils import Request
-from src.utils import Settings
+from utils import Request, DataType
+from utils import Settings
 
 
 class ParserEngine:
@@ -26,11 +22,7 @@ class ParserEngine:
             self.profiles: dict[str, dict[str, str]] = loaded["profiles"]
             self.request = Request(**loaded["request"])
 
-    def start(self, entries: List[Tuple[str, int]], done: Callable):
-        thread = Thread(target=self.process, args=(entries, done))
-        thread.start()
-
-    def parse(self, file: str):
+    def parse(self, file: str) -> Dict[str, float]:
         psutil.Process(os.getpid()).nice(psutil.HIGH_PRIORITY_CLASS)
         soup = BeautifulSoup(file, 'lxml')
         names = [x.text + ", " + y.text for x, y in zip(
@@ -45,20 +37,11 @@ class ParserEngine:
     def download(self, code):
         return self.request.fetch(code)
 
-    def process(self, entries: List[Tuple[str, int]], done: Callable):
-        try:
-            codes = [y for x, y in entries]
-            titles = [x for x, y in entries]
-            with Pool(len(codes)) as pool:
-                pages = pool.map(self.download, codes)
-            with Pool(len(pages)) as pool:
-                parse_res = pool.map(self.parse, pages)
-            data = dict(zip(titles, parse_res))
-            Spreadsheet(data, self.settings, [
-                (DataFormatter, "Данные"),
-                (AnalysisFormatter, "Анализ")
-            ]).export(titles, data)
-            done()
-        except Exception as e:
-            self.errors.append(e)
-            done(False)
+    def process(self, entries: List[Tuple[str, int]]) -> Tuple[List[str], DataType]:
+        codes = [y for x, y in entries]
+        titles = [x for x, y in entries]
+        with Pool(len(codes)) as pool:
+            pages = pool.map(self.download, codes)
+        with Pool(len(pages)) as pool:
+            parse_res: List[Dict[str, float]] = pool.map(self.parse, pages)
+        return titles, dict(zip(titles, parse_res))

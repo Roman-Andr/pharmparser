@@ -1,13 +1,16 @@
 import json
 import os
 from dataclasses import asdict
+from threading import Thread
+from typing import List, Tuple, Callable
 
 from CTkMessagebox import CTkMessagebox
 from customtkinter import CTk, CTkButton, CTkProgressBar
 
-from src.core import ParserEngine
+from core import ParserEngine
 from .profile import Profile
 from .profile_selector import ProfileSelector
+from excel import Spreadsheet, DataFormatter, AnalysisFormatter
 
 
 class App(CTk):
@@ -35,9 +38,9 @@ class App(CTk):
         self.selector = ProfileSelector(self, self.profiles)
         self.selector.grid(row=0, column=0, columnspan=3, padx=10, pady=10)
 
-        CTkButton(self, text="Add Profile", command=self.selector.add_profile).grid(row=0, column=3, padx=10, pady=10)
-        CTkButton(self, text="Delete Profile", command=self.selector.delete_profile).grid(row=0, column=4, padx=10,
-                                                                                          pady=10)
+        CTkButton(self, text="Add Profile", command=self.selector.add).grid(row=0, column=3, padx=10, pady=10)
+        CTkButton(self, text="Delete Profile", command=self.selector.remove).grid(row=0, column=4, padx=10,
+                                                                                  pady=10)
 
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
@@ -54,9 +57,10 @@ class App(CTk):
             return
         self.processing = True
         try:
-            self.engine.start(
+            thread = Thread(target=self.start, args=(
                 [(entry.get_text(), int(entry.get_url().split("/")[-1])) for entry in self.current_profile.entries],
-                self.done)
+                self.done))
+            thread.start()
             self.progress.grid(row=sum([len(p.entries) for p in self.profiles]) + 1,
                                column=0,
                                columnspan=3,
@@ -68,6 +72,14 @@ class App(CTk):
         except Exception as e:
             self.done(False)
             CTkMessagebox(title="Error", message=f"An error occurred: {str(e)}", icon="cancel")
+
+    def start(self, entries: List[Tuple[str, int]], done: Callable):
+        titles, data = self.engine.process(entries)
+        Spreadsheet(data, self.engine.settings, [
+            (DataFormatter, "Данные"),
+            (AnalysisFormatter, "Анализ")
+        ]).export(titles, data)
+        done()
 
     def done(self, status=True):
         self.processing = False

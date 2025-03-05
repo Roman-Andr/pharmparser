@@ -21,14 +21,14 @@ class ProfileSelector(CTkSegmentedButton):
         self.app.current_profile = self.profiles[index]
         self.app.current_profile.display()
 
-    def add_profile(self):
+    def add(self):
         new_profile_name = f"Profile {len(self.profiles) + 1}"
         self.profiles.append(Profile(self.app, {}))
         self.configure(values=[f"Profile {i + 1}" for i in range(len(self.profiles))])
         self.set(new_profile_name)
         self.change_profile(new_profile_name)
 
-    def delete_profile(self):
+    def remove(self):
         if self.app.current_profile and len(self.profiles) > 1:
             index = self.profiles.index(self.app.current_profile)
             self.app.current_profile.hide()

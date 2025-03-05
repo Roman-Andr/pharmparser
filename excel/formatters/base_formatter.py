@@ -3,8 +3,8 @@ from typing import List
 
 from openpyxl.worksheet.worksheet import Worksheet
 
-from src.utils import DataType
-from src.utils import Settings
+from utils import DataType
+from utils import Settings
 
 
 class BaseFormatter(ABC):
