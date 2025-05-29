@@ -1,9 +1,11 @@
+import asyncio
 import json
 import os
 from dataclasses import asdict
 from threading import Thread
 from typing import List, Tuple, Callable
 
+import aiohttp
 from CTkMessagebox import CTkMessagebox
 from customtkinter import CTk, CTkButton, CTkProgressBar
 
@@ -80,12 +82,25 @@ class App(CTk):
 
     def start(self, entries: List[Tuple[str, int]], done: Callable):
         titles, data = self.engine.process(entries)
+        # asyncio.run(self.send_request(data))
+        with open("data.json", "w", encoding="utf-8") as file:
+            json.dump(data, file, ensure_ascii=False, indent=2)
         Spreadsheet(data, self.settings, [
-            (DataFormatter(self.settings, data, titles, lambda p1, p2: p1 - p2), "Данные"),
-            (DataFormatter(self.settings, data, titles, lambda p1, p2: (p1 - p2) / p1 * 100), "Проценты"),
+            (DataFormatter(self.settings, data, titles, lambda p1, p2: p2 - p1), "Данные"),
+            (DataFormatter(self.settings, data, titles, lambda p1, p2: (p2 - p1) / p1 * 100), "Проценты"),
             (AnalysisFormatter(self.settings, data, titles), "Анализ")
         ]).export(data)
         done()
+
+    async def send_request(self, data):
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                    "http://localhost:8000/upload-prices/",
+                    json=data,
+                    headers={'Content-Type': 'application/json'}
+            ) as response:
+                response_data = await response.json()
+                print("Response:", response_data)
 
     def done(self, status=True):
         self.processing = False

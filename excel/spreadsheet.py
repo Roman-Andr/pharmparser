@@ -1,6 +1,6 @@
 import os
 from itertools import chain
-from typing import List, Type, Tuple
+from typing import List, Tuple
 
 from openpyxl.utils import get_column_letter
 from openpyxl.workbook import Workbook

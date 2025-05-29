@@ -23,7 +23,7 @@ class ParserEngine:
             soup.select("span[class=form-title]")
         )]
         prices = [x.text.strip().rstrip(" р.").lstrip("от ") for x in
-                  soup.select("div[class=tooltip-info-header] > span[class=price-value]")]
+                  soup.select("span[class=price-value]")]
         entry = {name: float(price) for name, price in zip(names, prices)}
         return entry
 

@@ -1,5 +1,5 @@
 altgraph==0.17.4
-beautifulsoup4==4.12.3
+beautifulsoup4==4.13.3
 certifi==2024.7.4
 charset-normalizer==3.3.2
 customtkinter==5.2.2

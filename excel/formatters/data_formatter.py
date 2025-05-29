@@ -45,10 +45,9 @@ class DataFormatter(BaseFormatter):
         for x in string.ascii_uppercase[3::2]:
             red_cell, green_cell = PatternFill(bgColor=self.settings.red), PatternFill(bgColor=self.settings.green)
             dxf_red, dxf_green = DifferentialStyle(fill=red_cell), DifferentialStyle(fill=green_cell)
-            rule_less = Rule("cellIs", operator="lessThan", formula=["0"], dxf=dxf_red)
-            rule_higher = Rule("cellIs", operator="greaterThan", formula=["0"], dxf=dxf_green)
             [ws.conditional_formatting.add(f"{x}{2 + offset}:{x}{len(grid)}", rule) for rule in
-             (rule_less, rule_higher)]
+             (Rule("cellIs", operator="lessThan", formula=["0"], dxf=dxf_red),
+              Rule("cellIs", operator="greaterThan", formula=["0"], dxf=dxf_green))]
 
         ws.auto_filter.ref = f"A{1 + offset}:{get_column_letter(len(grid[offset]))}{len(grid)}"
 

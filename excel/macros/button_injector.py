@@ -40,4 +40,4 @@ class ButtonInjector:
             button.create(self.worksheet)
             if self.workbook:
                 module = self.workbook.VBProject.VBComponents.Add(1)
-                module.CodeModule.AddFromString(button.macro.get_code().strip())
+                module.CodeModule.AddFromString(button.macro.code.strip())

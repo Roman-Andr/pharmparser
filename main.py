@@ -1,3 +1,4 @@
+import logging
 from multiprocessing import freeze_support
 
 from customtkinter import set_appearance_mode, set_default_color_theme
@@ -15,4 +16,5 @@ def main():
 
 if __name__ == "__main__":
     freeze_support()
+    logging.basicConfig(level=logging.INFO)
     main()
