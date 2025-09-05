@@ -9,7 +9,7 @@ from utils import Request, DataType
 
 
 class ParserEngine:
-    __slots__ = ["request", "errors"]
+    __slots__ = ["request", "errors", "callback"]
 
     def __init__(self, request: Request):
         self.errors = []
@@ -24,20 +24,15 @@ class ParserEngine:
         )]
         prices = [x.text.strip().rstrip(" р.").lstrip("от ") for x in
                   soup.select("span[class=price-value]")]
-        entry = {name: float(price) for name, price in zip(names, prices)}
-        return entry
+        return {name: float(price) for name, price in zip(names, prices)}
 
     def f(self, code):
-        return self.parse(self.request.fetch(code))
+        result = self.parse(self.request.fetch(code))
+        return result
 
     def process(self, entries: List[Tuple[str, int]]) -> Tuple[List[str], DataType]:
         codes = [y for x, y in entries]
         titles = [x for x, y in entries]
-
         with Pool(len(codes)) as pool:
-            parse_res: List[Dict[str, float]] = pool.map(
-                self.f,
-                codes
-            )
-
+            parse_res: List[Dict[str, float]] = pool.map(self.f, codes)
         return titles, dict(zip(titles, parse_res))

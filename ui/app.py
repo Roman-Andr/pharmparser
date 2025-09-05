@@ -7,7 +7,7 @@ from typing import List, Tuple, Callable
 
 import aiohttp
 from CTkMessagebox import CTkMessagebox
-from customtkinter import CTk, CTkButton, CTkProgressBar
+from customtkinter import CTk, CTkButton, CTkProgressBar, CTkCheckBox
 
 from core import ParserEngine
 from excel import Spreadsheet, DataFormatter, AnalysisFormatter
@@ -37,17 +37,18 @@ class App(CTk):
         with open(self.config, "r", encoding="utf-8") as f:
             loaded = json.load(f)
             self.settings = Settings(**loaded["settings"])
-            request = Request(**loaded["request"])
             for values in loaded["profiles"].values():
                 self.profiles.append(Profile(self, values))
-        self.engine = ParserEngine(request)
+        self.engine = ParserEngine(Request(**loaded["request"]))
 
         self.selector = ProfileSelector(self, self.profiles)
         self.selector.grid(row=0, column=0, columnspan=3, padx=10, pady=10)
 
         CTkButton(self, text="Add Profile", command=self.selector.add).grid(row=0, column=3, padx=10, pady=10)
-        CTkButton(self, text="Delete Profile", command=self.selector.remove).grid(row=0, column=4, padx=10,
-                                                                                  pady=10)
+        CTkButton(self, text="Delete Profile", command=self.selector.remove).grid(row=0, column=4, padx=10, pady=10)
+
+        self.cache_checkbox = CTkCheckBox(self, text="Cache")
+        self.cache_checkbox.grid(row=1, column=3, padx=10, pady=5)
 
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
@@ -68,7 +69,7 @@ class App(CTk):
                 [(entry.get_text(), int(entry.get_url().split("/")[-1])) for entry in self.current_profile.entries],
                 self.done))
             thread.start()
-            self.progress.grid(row=sum([len(p.entries) for p in self.profiles]) + 1,
+            self.progress.grid(row=len(self.current_profile.entries) + 2,
                                column=0,
                                columnspan=3,
                                padx=(20, 10),
@@ -81,26 +82,28 @@ class App(CTk):
             CTkMessagebox(title="Error", message=f"An error occurred: {str(e)}", icon="cancel")
 
     def start(self, entries: List[Tuple[str, int]], done: Callable):
-        titles, data = self.engine.process(entries)
-        # asyncio.run(self.send_request(data))
-        with open("data.json", "w", encoding="utf-8") as file:
-            json.dump(data, file, ensure_ascii=False, indent=2)
+        cache_file = "data.json"
+        use_cache = self.cache_checkbox.get() == 1 and os.path.exists(cache_file)
+        if use_cache:
+            try:
+                with open(cache_file, "r", encoding="utf-8") as file:
+                    data = json.load(file)
+                titles = list(data.keys())
+            except Exception as e:
+                CTkMessagebox(title="Cache Error",
+                              message=f"Failed to load from cache: {str(e)}",
+                              icon="warning")
+                use_cache = False
+        if not use_cache:
+            titles, data = self.engine.process(entries)
+            with open(cache_file, "w", encoding="utf-8") as file:
+                json.dump(data, file, ensure_ascii=False, indent=2)
         Spreadsheet(data, self.settings, [
             (DataFormatter(self.settings, data, titles, lambda p1, p2: p2 - p1), "Данные"),
             (DataFormatter(self.settings, data, titles, lambda p1, p2: (p2 - p1) / p1 * 100), "Проценты"),
             (AnalysisFormatter(self.settings, data, titles), "Анализ")
         ]).export(data)
         done()
-
-    async def send_request(self, data):
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                    "http://localhost:8000/upload-prices/",
-                    json=data,
-                    headers={'Content-Type': 'application/json'}
-            ) as response:
-                response_data = await response.json()
-                print("Response:", response_data)
 
     def done(self, status=True):
         self.processing = False

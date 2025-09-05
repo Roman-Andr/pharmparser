@@ -1,4 +1,4 @@
-from .macro import Macro
+from .macros import Macro
 
 
 class Button:
