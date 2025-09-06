@@ -9,7 +9,7 @@ from openpyxl.workbook import Workbook
 from win32api import RGB
 
 from utils import DataType, FilterCriteria, Settings, SortOrder
-from utils.utils import remove
+from utils.file_utils import clean_temp_files, remove
 from .formatters import BaseFormatter
 from .formatters import DataFormatter
 from .macros import Button, ApplyFiltersMacro, RemoveFiltersMacro, SortMacro
@@ -51,7 +51,7 @@ class Spreadsheet:
         wb.remove(wb.active)
         end_column = len(data) * 2
         target = self.settings.fileName.replace('.xlsx', '.xlsm')
-        remove(target, os.path.join(os.environ.get('LOCALAPPDATA'), 'Temp', 'gen_py'))
+        clean_temp_files(target)
         sheet_titles = []
         for formatter, title in self.formatters:
             sheet = wb.create_sheet(title)

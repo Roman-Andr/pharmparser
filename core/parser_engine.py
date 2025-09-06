@@ -30,7 +30,7 @@ class ParserEngine:
         result = {}
         for page in self.request.fetch(code):
             page_result = self.parse(page)
-            result = result | page_result
+            result |= page_result
         return result
 
     def process(self, entries: List[Tuple[str, int]]) -> Tuple[List[str], DataType]:
