@@ -27,7 +27,10 @@ class ParserEngine:
         return {name: float(price) for name, price in zip(names, prices)}
 
     def f(self, code):
-        result = self.parse(self.request.fetch(code))
+        result = {}
+        for page in self.request.fetch(code):
+            page_result = self.parse(page)
+            result = result | page_result
         return result
 
     def process(self, entries: List[Tuple[str, int]]) -> Tuple[List[str], DataType]:

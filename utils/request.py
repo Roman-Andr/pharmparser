@@ -1,6 +1,7 @@
 import json
 import os
 import urllib.parse
+from copy import deepcopy
 from dataclasses import dataclass
 from http.client import HTTPSConnection
 
@@ -17,16 +18,16 @@ class Request:
     def fetch(self, target):
         psutil.Process(os.getpid()).nice(psutil.REALTIME_PRIORITY_CLASS)
 
-        response = self.request(target, 0)
-        data = response["data"]
-        if response["priceCount"] > 5000:
-            for i in range(1, response["priceCount"] // 5000 + 2):
-                data += self.request(target, i + 1)["data"]
+        response = self.request(target, 0, 10)
+        data = []
+        for i in range(1, response["priceCount"] // 5000 + 2):
+            data.append(self.request(target, i)["data"])
         return data
 
-    def request(self, target, page=0):
+    def request(self, target, page=0, limit=5000):
         conn = HTTPSConnection("tabletka.by")
-
+        headers = deepcopy(self.headers)
+        headers["Cookie"] = headers["Cookie"].replace("lim-result=5000", f"lim-result={limit}")
         conn.request(
             "POST",
             "/ajax-request/reload-pharmacy-price/",
@@ -35,7 +36,7 @@ class Request:
                 "page": str(page),
                 **self.data
             }),
-            headers=self.headers,
+            headers=headers,
         )
         response = conn.getresponse().read().decode()
         conn.close()
