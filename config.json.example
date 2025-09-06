@@ -1,0 +1,29 @@
+{
+  "profiles": {
+    "Profile 1": {
+      "1": "https://tabletka.by/pharmacies/****"
+    }
+  },
+  "settings": {
+    "green": "19CF1F",
+    "red": "E81737",
+    "title": "Test",
+    "fileName": "data.xlsx",
+    "colWidth": 50,
+    "cellWidth": 15,
+    "diffWidth": 10
+  },
+  "request": {
+    "url": "https://tabletka.by/ajax-request/reload-pharmacy-price",
+    "headers": {
+      // Your headers
+      "Cookie": "your cookies"
+    },
+    "data": {
+      "sort": "name",
+      "sort_type": "...",
+      "str": "",
+      "_csrf": "..."
+    }
+  }
+}

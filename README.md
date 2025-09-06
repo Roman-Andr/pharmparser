@@ -1,7 +1,7 @@
 # Get started
 
 ```
-pip install -r requirements.txt
+us sync
 ```
 
 ## Make test request
@@ -24,9 +24,9 @@ You can use program like Postman
 ```json
 "_csrf": "...",
 "id": "target id",
-"page": "0",
 "sort": "name",
 "sort_type": "asc"
 ```
 
-Then insert this to ParserEngine request call
+### Config
+Configure config using config.json.example according to your cookies and data
