@@ -1,7 +1,7 @@
 # Get started
 
 ```
-us sync
+uv sync
 ```
 
 ## Make test request
