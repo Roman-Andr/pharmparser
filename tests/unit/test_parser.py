@@ -73,16 +73,29 @@ def test_every_row_of_a_real_page_is_read(name: str) -> None:
     prices = parse_page(html)
     assert len(prices) == len(BeautifulSoup(html, "lxml").select("tr.tr-border")) == 10
     assert all(price.price > 0 for price in prices)
-    assert all(", " in price.name for price in prices)
+    assert all(price.name.count(", ") >= 2 for price in prices), "name, form and maker"
 
 
 def test_a_real_page_parses_to_the_expected_values() -> None:
     prices = parse_page(html_of("live_price_page.json"))
     assert prices[0] == DrugPrice(
-        "9 Месяцев Фолиевая кислота, таблетки покрытые оболочкой 400мкг N30", 10.17
+        "9 Месяцев Фолиевая кислота, таблетки покрытые оболочкой 400мкг N30, Валента", 10.17
     )
-    assert prices[1] == DrugPrice("911 Дегтярное жидкое мыло, жидкое мыло 250мл N1", 6.84)
-    assert prices[2] == DrugPrice("911 Теймурова паста, паста 50мл N1", 4.36)
+    assert prices[1] == DrugPrice("911 Дегтярное жидкое мыло, жидкое мыло 250мл N1, Твинс Тэк ЗАО", 6.84)
+    assert prices[2] == DrugPrice("911 Теймурова паста, паста 50мл N1, Твинс Тэк ЗАО", 4.36)
+
+
+@pytest.mark.parametrize("name", LIVE_PAGES)
+def test_the_manufacturer_makes_every_label_unique(name: str) -> None:
+    """Regression for B16.
+
+    The same drug and pack from two makers sells at two prices. Keying on name and
+    form alone silently kept whichever row came last — about 1 % of a real
+    pharmacy's list. The manufacturer goes on the end of the label, so the report's
+    first column still reads name-first and sorts as it always did.
+    """
+    labels = [price.name for price in parse_page(html_of(name))]
+    assert len(set(labels)) == len(labels)
 
 
 @pytest.mark.parametrize("name", LIVE_PAGES)
@@ -114,10 +127,10 @@ def test_the_test_markup_matches_the_captured_markup() -> None:
 # -- page parsing --------------------------------------------------------------
 
 
-def test_parses_every_row_with_name_and_form() -> None:
+def test_parses_every_row_with_name_form_and_maker() -> None:
     assert parse_page(simple_page("5,00 р.")) == [
-        DrugPrice("Аспирин, таблетки 100мг", 5.00),
-        DrugPrice("Цитрамон, таблетки N10", 5.00),
+        DrugPrice("Аспирин, таблетки 100мг, Производитель", 5.00),
+        DrugPrice("Цитрамон, таблетки N10, Производитель", 5.00),
     ]
 
 
@@ -130,8 +143,8 @@ def test_rows_stay_aligned_when_the_page_drifts() -> None:
     document-wide and zipped them, so every later name took the wrong price.
     """
     assert parse_page(fixture("price_page_drifted.html")) == [
-        DrugPrice("9 Месяцев Фолиевая кислота, таблетки покрытые оболочкой 400мкг N30", 10.17),
-        DrugPrice("911 Теймурова паста", 4.36),
+        DrugPrice("9 Месяцев Фолиевая кислота, таблетки покрытые оболочкой 400мкг N30, Валента", 10.17),
+        DrugPrice("911 Теймурова паста, Твинс Тэк ЗАО", 4.36),
     ]
 
 
@@ -159,7 +172,7 @@ def test_a_page_of_prices_that_reads_as_empty_is_an_error(caplog: pytest.LogCapt
 
 
 def test_a_row_without_a_form_title_still_yields_a_price() -> None:
-    assert parse_page(page(row("Аспирин", "", "5,00 р."))) == [DrugPrice("Аспирин", 5.00)]
+    assert parse_page(page(row("Аспирин", "", "5,00 р.", maker=""))) == [DrugPrice("Аспирин", 5.00)]
 
 
 # -- merging -------------------------------------------------------------------
@@ -170,9 +183,28 @@ def test_merge_flattens_pages() -> None:
     assert merge(pages) == {"A": 1.0, "B": 2.0, "C": 3.0}
 
 
-def test_merge_keeps_the_last_price_for_a_repeated_name() -> None:
-    """B16: the same drug and form from two manufacturers collapses to one row."""
+def test_merge_keeps_the_last_price_for_a_repeated_label() -> None:
+    """Only a genuinely identical item — same name, pack and maker — merges now."""
     assert merge([[DrugPrice("A", 1.0)], [DrugPrice("A", 9.0)]]) == {"A": 9.0}
+
+
+def test_two_makers_of_one_drug_stay_apart() -> None:
+    """Regression for B16, at the label level."""
+    from pharmparser.scraping.parser import item_label
+
+    first = item_label("Амлодипин", "таблетки 10мг N30", "Борисовский ЗМП")
+    second = item_label("Амлодипин", "таблетки 10мг N30", "Тева")
+    assert first != second
+    assert first.startswith("Амлодипин, таблетки 10мг N30"), "the name still leads"
+    assert merge([[DrugPrice(first, 1.0), DrugPrice(second, 9.0)]]) == {first: 1.0, second: 9.0}
+
+
+def test_a_label_leaves_out_the_parts_it_does_not_have() -> None:
+    from pharmparser.scraping.parser import item_label
+
+    assert item_label("Аспирин", "", "") == "Аспирин"
+    assert item_label("Аспирин", "таблетки", "") == "Аспирин, таблетки"
+    assert item_label("Аспирин", "", "Bayer") == "Аспирин, Bayer"
 
 
 def test_merge_of_nothing_is_empty() -> None:

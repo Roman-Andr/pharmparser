@@ -19,7 +19,8 @@ from .domain import Pharmacy, PriceTable
 
 logger = logging.getLogger(__name__)
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2
+"""Bumped when item labels gained the manufacturer (B16), which rekeys every entry."""
 
 
 class CachedPharmacy(BaseModel):

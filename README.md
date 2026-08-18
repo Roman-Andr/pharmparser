@@ -141,6 +141,11 @@ the thing to look at — or ask a user for — when something goes wrong.
 | `Проценты` | The same layout, with differences as a percentage of the reference price |
 | `settings.title` | Assortment sizes, items cheapest everywhere, unique items, and a per-competitor breakdown |
 
+An item is labelled `name, pack, manufacturer` — the manufacturer is on the end so the
+column still reads and sorts by drug name. It is part of the label because the same drug
+and pack from two makers sells at two prices, and without it one of them was silently
+dropped (about 1 % of rows).
+
 A blank difference cell means the comparison is undefined — one of the two pharmacies does
 not stock the item. That is distinct from a difference of `0`, which means the prices match.
 

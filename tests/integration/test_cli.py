@@ -14,7 +14,7 @@ from ..pages import page, row
 
 
 def PAGE(price: str) -> str:
-    return page(row("Аспирин", "100мг", f"от {price} р."))
+    return page(row("Аспирин", "100мг", f"от {price} р.", maker="Bayer"))
 
 
 @pytest.fixture
@@ -58,7 +58,7 @@ def test_cli_writes_a_workbook(config_file: Path, tmp_path: Path, two_pharmacies
 
     sheet = load_workbook(output)["Данные"]
     assert [cell.value for cell in sheet[3]] == ["Название", "Аптека 1", "Аптека 2", "Разница"]
-    assert [cell.value for cell in sheet[4]] == ["Аспирин, 100мг", 5.0, 6.5, 1.5]
+    assert [cell.value for cell in sheet[4]] == ["Аспирин, 100мг, Bayer", 5.0, 6.5, 1.5]
 
 
 def test_cli_defaults_to_the_first_profile(config_file: Path, tmp_path: Path, two_pharmacies: FakeEndpoint) -> None:

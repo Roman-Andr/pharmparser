@@ -3,8 +3,8 @@
 **Status:** all six phases complete · **Scope:** whole codebase (~770 LOC across 24 Python files at the
 starting point) · **Origin:** a full read of every source file at `b80debc`
 
-Every phase below records what it actually changed under an **Outcome** heading. One finding
-remains open — **B16** needs a decision from the user; see §5a.
+Every phase below records what it actually changed under an **Outcome** heading. All fifteen
+original findings are fixed, as are B16 and B17, which were found later by calling the live site.
 
 ---
 
@@ -123,12 +123,20 @@ but nothing reads it — verified by grep across the whole package. A real user'
 the analysis sheet, or the workbook's document title) or drop it; silently ignoring a value the
 user set is the worst of the three options. Deferred to phase 3, which owns the sheet layout.
 
-**B16 — Two manufacturers of the same drug collapse into one row.** `merge()` keys
-prices by `"{name}, {form}"`, so two rows differing only by manufacturer overwrite each
-other and the last one wins. Measured against a live capture: 45 of 4240 rows for one
-pharmacy, ~1 %. Pre-existing — `dict(zip(...))` in the old engine did the same — and not
-changed here, because the fix (folding the manufacturer into the key) relabels every item
-in the report. *Decision needed from the user.*
+**B16 — Two manufacturers of the same drug collapse into one row.** `merge()` keyed
+prices by `"{name}, {form}"`, so two rows differing only by manufacturer overwrote each
+other and the last one won. Measured against live captures: 45 of 4240 rows for one
+pharmacy, 9 of 3547 for another, 44 of 5000 for a third. Pre-existing — `dict(zip(...))`
+in the old engine did the same. **Fixed** by putting the manufacturer at the end of the
+item label, so the report's first column still reads name-first and sorts as it always
+did. After the fix all three captures yield exactly as many rows as they contain.
+
+The concern with any change to item identity is cross-pharmacy matching, so it was
+measured on the three full price lists before the change was made: shared items between
+pairs of pharmacies move by under 1 % — 2102 → 2088, 1648 → 1634, and 2698 → **2717**,
+which goes *up*, because rows that used to be swallowed by a duplicate now match
+properly. `CACHE_VERSION` is bumped to 2, so caches written under the old labels are
+rejected rather than silently mixing the two schemes.
 
 **B17 — The configured endpoint URL 500s without a trailing slash.** Found by calling the
 live endpoint: `POST /ajax-request/reload-pharmacy-price` returns HTTP 500, and the same
@@ -504,16 +512,8 @@ Everything was moved to its latest release, which surfaced three problems worth 
    the whole pipeline honest in CI, and it costs about 50 lines once the controller exists.
 3. **Should the UI stay Russian-only?** Labels are currently hardcoded Russian string literals
    inside the formatters. If localisation is ever wanted, Phase 3 is the moment to route them
-   through a message catalogue rather than retrofitting later.
-
----
-
-## 5a. Decision outstanding
-
-**B16 — should the manufacturer be part of an item's identity?** Roughly 1 % of rows share a
-name and form while differing by manufacturer and price; today the later one silently wins.
-Including the manufacturer in the key fixes it but relabels every row of every report, so it
-is the user's call rather than a refactoring detail.
+   through a message catalogue rather than retrofitting later. *Answered: Russian only — see
+   decision 6 below.*
 
 ---
 
@@ -533,3 +533,8 @@ is the user's call rather than a refactoring detail.
    the first release shipping cp314 wheels.
 5. **pydantic and pydantic-settings** are adopted for configuration (added 2026-08-18), which
    pulled phase 4 forward ahead of phase 3.
+6. **The interface stays Russian-only.** No message catalogue, no localisation layer: the sheet
+   labels stay as Russian literals in `export/grids.py`, where they read as the report's own
+   wording rather than as keys pointing somewhere else.
+7. **B16 is fixed by appending the manufacturer to the item label**, keeping the report's
+   layout untouched — no new column, and the first column still sorts by drug name.

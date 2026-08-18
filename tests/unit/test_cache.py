@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from pharmparser.cache import read_table, write_table
+from pharmparser.cache import CACHE_VERSION, read_table, write_table
 from pharmparser.config import cache_path
 from pharmparser.domain import PriceTable
 
@@ -22,7 +22,10 @@ def test_round_trips_a_price_table(tmp_path: Path, table: PriceTable) -> None:
 def test_rejects_a_future_cache_version(tmp_path: Path, table: PriceTable) -> None:
     path = tmp_path / "cache.json"
     write_table(table, path)
-    path.write_text(path.read_text(encoding="utf-8").replace('"version": 1', '"version": 99'), encoding="utf-8")
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(f'"version": {CACHE_VERSION}', '"version": 99'),
+        encoding="utf-8",
+    )
     with pytest.raises(ValueError, match="version 99"):
         read_table(path)
 

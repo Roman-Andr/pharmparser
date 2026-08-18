@@ -17,7 +17,10 @@ ENDPOINT = URL + "/"
 """What the client actually posts to: tabletka.by 500s without the trailing slash (B17)."""
 
 PAGE_HTML = simple_page("от 5,00 р.")
-EXPECTED = {"Аспирин, таблетки 100мг": 5.00, "Цитрамон, таблетки N10": 5.00}
+EXPECTED = {
+    "Аспирин, таблетки 100мг, Производитель": 5.00,
+    "Цитрамон, таблетки N10, Производитель": 5.00,
+}
 
 
 @pytest.fixture
