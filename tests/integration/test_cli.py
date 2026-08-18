@@ -10,14 +10,15 @@ from openpyxl import load_workbook
 from pharmparser.cli import main
 from pharmparser.platform_ import supports_excel_macros
 
-URL = "https://tabletka.by/ajax-request/reload-pharmacy-price"
+from ..pages import page, row
 
-PAGE = """
-<div class="result-row">
-  <div class="tooltip-info-header"><a href="/d/1">Аспирин</a></div>
-  <div><span class="form-title">100мг</span><span class="price-value">от {price} р.</span></div>
-</div>
-"""
+URL = "https://tabletka.by/ajax-request/reload-pharmacy-price"
+ENDPOINT = URL + "/"
+"""What the client actually posts to: tabletka.by 500s without the trailing slash (B17)."""
+
+
+def PAGE(price: str) -> str:
+    return page(row("Аспирин", "100мг", f"от {price} р."))
 
 
 @pytest.fixture
@@ -49,8 +50,8 @@ def config_file(tmp_path: Path) -> Path:
 
 def stub_two_pharmacies(mocked: aioresponses) -> None:
     for price in ("5,00", "6,50"):
-        mocked.post(URL, payload={"priceCount": 1, "data": ""})
-        mocked.post(URL, payload={"priceCount": 1, "data": PAGE.format(price=price)})
+        mocked.post(ENDPOINT, payload={"priceCount": 1, "data": ""})
+        mocked.post(ENDPOINT, payload={"priceCount": 1, "data": PAGE(price)})
 
 
 def test_cli_writes_a_workbook(config_file: Path, tmp_path: Path) -> None:
@@ -92,7 +93,7 @@ def test_cli_reports_a_scrape_failure(config_file: Path, tmp_path: Path, capsys:
     """B6: scrape failures reach the user instead of vanishing."""
     with aioresponses() as mocked:
         for _ in range(6):
-            mocked.post(URL, status=500)
+            mocked.post(ENDPOINT, status=500)
         assert main(["--config", str(config_file), "--output", str(tmp_path / "x.xlsx")]) == 1
     assert "could not be parsed" in capsys.readouterr().err
 
@@ -104,7 +105,7 @@ def test_env_cookie_reaches_the_request(
     with aioresponses() as mocked:
         stub_two_pharmacies(mocked)
         assert main(["--config", str(config_file), "--output", str(tmp_path / "r.xlsx")]) == 0
-        sent = mocked.requests[("POST", __import__("aiohttp").helpers.URL(URL))][0]
+        sent = mocked.requests[("POST", __import__("aiohttp").helpers.URL(ENDPOINT))][0]
     assert "from-env" in sent.kwargs["headers"]["Cookie"]
 
 

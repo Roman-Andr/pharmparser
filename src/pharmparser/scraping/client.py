@@ -73,7 +73,7 @@ class TabletkaClient:
         for attempt in range(1, self._retries + 1):
             try:
                 async with self._session.post(
-                    str(self._config.url), data=payload, headers=headers
+                    self._config.endpoint, data=payload, headers=headers
                 ) as response:
                     response.raise_for_status()
                     return PricePage.model_validate(await response.json(content_type=None))

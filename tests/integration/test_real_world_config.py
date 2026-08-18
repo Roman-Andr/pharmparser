@@ -24,20 +24,19 @@ from pharmparser.config import load_config, save_config
 from pharmparser.export import export_with_macros
 from pharmparser.scraping import scrape_profile
 
+from ..pages import page as build_page
+from ..pages import row
+
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "real_world_config.json"
 URL = "https://tabletka.by/ajax-request/reload-pharmacy-price"
-
-ROW = """
-<div class="result-row">
-  <div class="tooltip-info-header"><a href="/d/{n}">{name}</a></div>
-  <div><span class="form-title">{form}</span><span class="price-value">от {price} р.</span></div>
-</div>
-"""
+ENDPOINT = URL + "/"
+"""What the client actually posts to: tabletka.by 500s without the trailing slash (B17)."""
 
 
 def page(price: str) -> str:
-    return ROW.format(n=1, name="Аспирин", form="100мг", price=price) + ROW.format(
-        n=2, name="Цитрамон", form="10шт", price=price
+    return build_page(
+        row("Аспирин", "100мг", f"от {price} р.", ls=1),
+        row("Цитрамон", "10шт", f"от {price} р.", ls=2),
     )
 
 
@@ -50,8 +49,8 @@ def config_file(tmp_path: Path) -> Path:
 
 def stub(mocked: aioresponses, pharmacies: int) -> None:
     for i in range(pharmacies):
-        mocked.post(URL, payload={"priceCount": 2, "data": ""})
-        mocked.post(URL, payload={"priceCount": 2, "data": page(f"{5 + i},00")})
+        mocked.post(ENDPOINT, payload={"priceCount": 2, "data": ""})
+        mocked.post(ENDPOINT, payload={"priceCount": 2, "data": page(f"{5 + i},00")})
 
 
 # -- loading -------------------------------------------------------------------
@@ -101,7 +100,7 @@ def test_browser_headers_survive_to_the_request(config_file: Path, tmp_path: Pat
     with aioresponses() as mocked:
         stub(mocked, 9)
         assert main(["--config", str(config_file), "--output", str(tmp_path / "r.xlsx")]) == 0
-        sent = mocked.requests[("POST", aiohttp.helpers.URL(URL))][0]
+        sent = mocked.requests[("POST", aiohttp.helpers.URL(ENDPOINT))][0]
 
     headers = sent.kwargs["headers"]
     assert headers["Content-Type"] == "application/x-www-form-urlencoded; charset=UTF-8"
@@ -147,7 +146,7 @@ def test_the_whole_browser_cookie_survives_to_the_request(config_file: Path, tmp
     with aioresponses() as mocked:
         stub(mocked, 9)
         assert main(["--config", str(config_file), "--output", str(tmp_path / "r.xlsx")]) == 0
-        sent = mocked.requests[("POST", aiohttp.helpers.URL(URL))][0]
+        sent = mocked.requests[("POST", aiohttp.helpers.URL(ENDPOINT))][0]
 
     configured = load_config(config_file).request.cookie
     keys = [cookie.split("=", 1)[0].strip() for cookie in sent.kwargs["headers"]["Cookie"].split(";")]

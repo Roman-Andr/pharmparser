@@ -119,6 +119,21 @@ but nothing reads it — verified by grep across the whole package. A real user'
 the analysis sheet, or the workbook's document title) or drop it; silently ignoring a value the
 user set is the worst of the three options. Deferred to phase 3, which owns the sheet layout.
 
+**B16 — Two manufacturers of the same drug collapse into one row.** `merge()` keys
+prices by `"{name}, {form}"`, so two rows differing only by manufacturer overwrite each
+other and the last one wins. Measured against a live capture: 45 of 4240 rows for one
+pharmacy, ~1 %. Pre-existing — `dict(zip(...))` in the old engine did the same — and not
+changed here, because the fix (folding the manufacturer into the key) relabels every item
+in the report. *Decision needed from the user.*
+
+**B17 — The configured endpoint URL 500s without a trailing slash.** Found by calling the
+live endpoint: `POST /ajax-request/reload-pharmacy-price` returns HTTP 500, and the same
+request to `.../reload-pharmacy-price/` returns 200. The old code hardcoded the path *with*
+the slash, and real `config.json` files carry it *without* — so honouring the configured URL
+verbatim (the B13 fix) made every live request fail. Fixed by normalising in
+`RequestConfig.endpoint` at request time, leaving the stored value untouched so config files
+still round-trip byte for byte.
+
 **B13 — `Request.url` is configured but ignored.** `utils/request.py` hardcodes
 `HTTPSConnection("tabletka.by")` and `/ajax-request/reload-pharmacy-price/` while the `url` field
 from `config.json` is loaded and never read. Changing the endpoint in config does nothing. There
@@ -306,10 +321,23 @@ header set (lowercase `host`, explicit `Content-Type` alongside form-encoded dat
 column widths. It loads, round-trips byte-for-byte, scrapes and exports —
 `tests/integration/test_real_world_config.py` keeps it that way.
 
-**Fixtures are synthetic.** `tests/fixtures/*.html` were reconstructed from the CSS selectors the
-old engine used, not captured from tabletka.by. They pin the parser's contract — row scoping,
-price cleanup, tolerance of drift — but cannot prove the selectors still match the live site.
-Replacing them with real captured responses is the single highest-value follow-up.
+**The synthetic fixtures were hiding a broken parser — now fixed.** `tests/fixtures/*.html`
+had been reconstructed from the CSS selectors the old engine used rather than captured from
+tabletka.by, and they were wrong. Against three responses captured from the live endpoint
+(2026-08-18, pharmacies 3563/381/1953) the phase 2 parser read **zero** prices from every one:
+a result is a `tr.tr-border` whose name, form, manufacturer, booking *and* price cells each
+carry a `div.tooltip-info-header`, so anchoring a "result row" on that class found five
+non-results per row and no prices at all. The old `zip()`-based engine happened to work,
+because `div.tooltip-info-header > a` matched only the name cell.
+
+The parser now scopes to `tr.tr-border` and reads each field from its own cell, keeping B7's
+property that nothing is paired positionally across the document. It logs at `ERROR` when a
+page holds price cells but yields no prices — the signal that would have caught this at once.
+`tests/fixtures/live_price_page*.json` are the captured responses, `price_page_drifted.html`
+is built from real rows with damage introduced deliberately, and `tests/pages.py` supplies
+markup for the tests that need a page, with a test keeping that template in step with the
+capture. Verified end to end against the live site: two real pharmacies, 4195 and 3853 items,
+into a real workbook.
 
 ### Phase 3 — Rewrite the export layer — **done**
 - Pure grid builders + golden-file tests.
@@ -404,6 +432,15 @@ take precedence over `config.json`.
 3. **Should the UI stay Russian-only?** Labels are currently hardcoded Russian string literals
    inside the formatters. If localisation is ever wanted, Phase 3 is the moment to route them
    through a message catalogue rather than retrofitting later.
+
+---
+
+## 5a. Decision outstanding
+
+**B16 — should the manufacturer be part of an item's identity?** Roughly 1 % of rows share a
+name and form while differing by manufacturer and price; today the later one silently wins.
+Including the manufacturer in the key fixes it but relabels every row of every report, so it
+is the user's call rather than a refactoring detail.
 
 ---
 

@@ -8,14 +8,13 @@ from pydantic import HttpUrl
 from pharmparser.config import PharmacyEntry, RequestConfig
 from pharmparser.scraping import PricePage, ScrapeError, TabletkaClient
 
-URL = "https://tabletka.by/ajax-request/reload-pharmacy-price"
+from ..pages import simple_page
 
-PAGE_HTML = """
-<div class="result-row">
-  <div class="tooltip-info-header"><a href="/d/1">Аспирин</a></div>
-  <div><span class="form-title">100мг</span><span class="price-value">от 5,00 р.</span></div>
-</div>
-"""
+URL = "https://tabletka.by/ajax-request/reload-pharmacy-price"
+ENDPOINT = URL + "/"
+"""What the client actually posts to: tabletka.by 500s without the trailing slash (B17)."""
+
+PAGE_HTML = simple_page("от 5,00 р.")
 
 
 @pytest.fixture
@@ -58,9 +57,12 @@ async def test_fetches_and_parses_a_single_page(request_config: RequestConfig, e
     client, session = await make_client(request_config)
     try:
         with aioresponses() as mocked:
-            mocked.post(URL, payload={"priceCount": 1, "data": ""})
-            mocked.post(URL, payload={"priceCount": 1, "data": PAGE_HTML})
-            assert await client.prices_for(entry) == {"Аспирин, 100мг": 5.00}
+            mocked.post(ENDPOINT, payload={"priceCount": 1, "data": ""})
+            mocked.post(ENDPOINT, payload={"priceCount": 1, "data": PAGE_HTML})
+            assert await client.prices_for(entry) == {
+                "Аспирин, таблетки 100мг": 5.00,
+                "Цитрамон, таблетки N10": 5.00,
+            }
     finally:
         await session.close()
 
@@ -69,11 +71,11 @@ async def test_paginates_over_the_reported_count(request_config: RequestConfig, 
     client, session = await make_client(request_config)
     try:
         with aioresponses() as mocked:
-            mocked.post(URL, payload={"priceCount": 12000, "data": ""})  # count probe
+            mocked.post(ENDPOINT, payload={"priceCount": 12000, "data": ""})  # count probe
             for _ in range(3):  # 12000 prices at 5000 per page
-                mocked.post(URL, payload={"priceCount": 12000, "data": PAGE_HTML})
+                mocked.post(ENDPOINT, payload={"priceCount": 12000, "data": PAGE_HTML})
             await client.prices_for(entry)
-            assert len(mocked.requests[("POST", aiohttp.helpers.URL(URL))]) == 4
+            assert len(mocked.requests[("POST", aiohttp.helpers.URL(ENDPOINT))]) == 4
     finally:
         await session.close()
 
@@ -85,10 +87,10 @@ async def test_uses_the_configured_url(entry: PharmacyEntry) -> None:
     client, session = await make_client(config)
     try:
         with aioresponses() as mocked:
-            mocked.post(other, payload={"priceCount": 0, "data": ""})
-            mocked.post(other, payload={"priceCount": 0, "data": ""})
+            mocked.post(other + "/", payload={"priceCount": 0, "data": ""})
+            mocked.post(other + "/", payload={"priceCount": 0, "data": ""})
             await client.prices_for(entry)
-            assert ("POST", aiohttp.helpers.URL(other)) in mocked.requests
+            assert ("POST", aiohttp.helpers.URL(other + "/")) in mocked.requests
     finally:
         await session.close()
 
@@ -97,10 +99,13 @@ async def test_retries_then_succeeds(request_config: RequestConfig, entry: Pharm
     client, session = await make_client(request_config)
     try:
         with aioresponses() as mocked:
-            mocked.post(URL, status=503)
-            mocked.post(URL, payload={"priceCount": 1, "data": ""})
-            mocked.post(URL, payload={"priceCount": 1, "data": PAGE_HTML})
-            assert await client.prices_for(entry) == {"Аспирин, 100мг": 5.00}
+            mocked.post(ENDPOINT, status=503)
+            mocked.post(ENDPOINT, payload={"priceCount": 1, "data": ""})
+            mocked.post(ENDPOINT, payload={"priceCount": 1, "data": PAGE_HTML})
+            assert await client.prices_for(entry) == {
+                "Аспирин, таблетки 100мг": 5.00,
+                "Цитрамон, таблетки N10": 5.00,
+            }
     finally:
         await session.close()
 
@@ -109,8 +114,8 @@ async def test_gives_up_after_the_retry_budget(request_config: RequestConfig, en
     client, session = await make_client(request_config, retries=2)
     try:
         with aioresponses() as mocked:
-            mocked.post(URL, status=500)
-            mocked.post(URL, status=500)
+            mocked.post(ENDPOINT, status=500)
+            mocked.post(ENDPOINT, status=500)
             with pytest.raises(ScrapeError, match="after 2 attempts"):
                 await client.prices_for(entry)
     finally:
@@ -122,7 +127,7 @@ async def test_reports_the_pharmacy_in_the_error(request_config: RequestConfig, 
     client, session = await make_client(request_config, retries=1)
     try:
         with aioresponses() as mocked:
-            mocked.post(URL, status=500)
+            mocked.post(ENDPOINT, status=500)
             with pytest.raises(ScrapeError, match="pharmacy 111"):
                 await client.prices_for(entry)
     finally:
@@ -136,11 +141,33 @@ async def test_page_size_is_narrowed_for_the_count_probe(
     client, session = await make_client(request_config)
     try:
         with aioresponses() as mocked:
-            mocked.post(URL, payload={"priceCount": 0, "data": ""})
-            mocked.post(URL, payload={"priceCount": 0, "data": ""})
+            mocked.post(ENDPOINT, payload={"priceCount": 0, "data": ""})
+            mocked.post(ENDPOINT, payload={"priceCount": 0, "data": ""})
             await client.prices_for(entry)
-            probe, full = mocked.requests[("POST", aiohttp.helpers.URL(URL))]
+            probe, full = mocked.requests[("POST", aiohttp.helpers.URL(ENDPOINT))]
             assert "lim-result=10" in probe.kwargs["headers"]["Cookie"]
             assert "lim-result=5000" in full.kwargs["headers"]["Cookie"]
     finally:
         await session.close()
+
+
+def test_the_endpoint_gains_the_trailing_slash_the_site_requires() -> None:
+    """B17.
+
+    The live route carries a mandatory ``/`` suffix: the same POST returns 200 with
+    it and 500 without. Real config files carry the URL without, so the client
+    normalises while ``config.json`` keeps round-tripping unchanged.
+    """
+    config = RequestConfig(url=HttpUrl(URL), headers={"Cookie": "x=1"})
+    assert str(config.url) == URL
+    assert config.endpoint == ENDPOINT
+
+
+def test_an_already_slashed_endpoint_is_left_alone() -> None:
+    config = RequestConfig(url=HttpUrl(ENDPOINT), headers={"Cookie": "x=1"})
+    assert config.endpoint == ENDPOINT
+
+
+def test_a_query_string_stays_after_the_slash() -> None:
+    config = RequestConfig(url=HttpUrl("https://example.test/prices?a=1"), headers={"Cookie": "x=1"})
+    assert config.endpoint == "https://example.test/prices/?a=1"

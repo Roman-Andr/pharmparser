@@ -154,6 +154,19 @@ class RequestConfig(BaseModel):
     headers: dict[str, str] = Field(default_factory=dict)
     data: dict[str, str] = Field(default_factory=dict)
 
+    @property
+    def endpoint(self) -> str:
+        """The URL to actually POST to: the configured one, with a trailing slash.
+
+        tabletka.by routes carry a mandatory ``/`` suffix. Verified against the live
+        endpoint: the same POST returns 200 with the trailing slash and 500 without
+        it, and real config files carry it without (B17). Normalising here rather
+        than on the field keeps ``config.json`` round-tripping byte for byte.
+        """
+        url = str(self.url)
+        base, separator, query = url.partition("?")
+        return base if base.endswith("/") else f"{base}/{separator}{query}"
+
     @field_validator("headers")
     @classmethod
     def _require_a_cookie(cls, value: dict[str, str], info: ValidationInfo) -> dict[str, str]:
