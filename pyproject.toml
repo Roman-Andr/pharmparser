@@ -3,14 +3,14 @@ name = "pharmparser"
 version = "0.1.0"
 description = "Desktop app that scrapes and compares drug prices across tabletka.by pharmacies and exports a formatted Excel workbook."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = { text = "MIT" }
 dependencies = [
     "aiohttp>=3.12.14",
     "beautifulsoup4>=4.13.4",
     "ctkmessagebox>=2.7",
     "customtkinter>=5.2.2",
-    "lxml>=6.0.0",
+    "lxml>=6.0.1",
     "openpyxl>=3.1.5",
     "psutil>=7.0.0",
     # Excel macro injection (.xlsm buttons) is Windows-only; the rest of the
@@ -43,7 +43,7 @@ packages = ["src/pharmparser"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py314"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
@@ -69,7 +69,7 @@ ignore = [
 "tests/*" = ["E501"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 files = ["src", "tests"]
 ignore_missing_imports = true
 warn_unused_ignores = true
