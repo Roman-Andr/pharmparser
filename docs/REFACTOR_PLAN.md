@@ -277,7 +277,7 @@ not stock is now left **blank** rather than written as `0`. A `0` was indistingu
 two prices that genuinely match. The VBA `">0"` filter excludes blanks and zeroes alike, so
 filtering behaviour is unchanged; blanks sort last rather than among the zeroes.
 
-### Phase 2 — Rewrite the scraping layer
+### Phase 2 — Rewrite the scraping layer — **done**
 - Split `client` (HTTP) / `parser` (HTML→models) / `service` (fan-out) apart.
 - Async `aiohttp` with timeouts, retries + backoff, status checks, bounded concurrency.
 - Fix **B7** (parse per result row instead of zipping parallel selections, and warn on
@@ -288,6 +288,16 @@ filtering behaviour is unchanged; blanks sort last rather than among the zeroes.
 - **Exit criteria:** parser is 100 % covered from fixtures; the network layer is faked in tests
   behind `PriceSource`.
 
+**Outcome.** `scraping/` splits into `parser` (pure HTML → prices), `client` (async aiohttp with
+timeouts, retries and backoff, validating the JSON envelope with pydantic) and `service`
+(bounded-concurrency fan-out to a `PriceTable`). `multiprocessing.Pool` and the realtime-priority
+calls are gone. B4, B6, B7, B8, B11 and B13 are fixed with regression tests.
+
+**Fixtures are synthetic.** `tests/fixtures/*.html` were reconstructed from the CSS selectors the
+old engine used, not captured from tabletka.by. They pin the parser's contract — row scoping,
+price cleanup, tolerance of drift — but cannot prove the selectors still match the live site.
+Replacing them with real captured responses is the single highest-value follow-up.
+
 ### Phase 3 — Rewrite the export layer
 - Pure grid builders + golden-file tests.
 - Single `openpyxl` writer; conditional formatting and column widths driven by
@@ -297,11 +307,22 @@ filtering behaviour is unchanged; blanks sort last rather than among the zeroes.
   for the whole workbook, atomic replace at the end).
 - **Exit criteria:** a full `.xlsx` export runs and is verified by read-back in CI on Linux.
 
-### Phase 4 — Config and persistence
+### Phase 4 — Config and persistence — **done** (pulled forward)
 - Validated models, actionable errors, first-run bootstrap from the example, atomic save,
   `snake_case`, preserved profile names (**A6**).
 - Cache becomes explicit: opt-in, per-profile, timestamped, in a proper cache dir (**A7**).
 - **Exit criteria:** malformed/missing/partial config all covered by tests.
+
+**Outcome.** Pulled forward from its planned slot because the scraping rewrite needed a validated
+`RequestConfig` and would otherwise have been built twice. `config/models.py` is pydantic:
+snake_case internally, camelCase on disk via an alias generator, so **existing `config.json` files
+load unchanged**. Colours, widths, pharmacy URLs and profile/pharmacy name uniqueness are all
+validated, and `ConfigError` reports the offending field instead of a bare `TypeError`. Saves are
+atomic and profile names are preserved (A6). Caches are per profile and versioned (A7).
+
+`pydantic-settings` supplies `EnvOverrides`, so credentials can stay out of the file entirely:
+`PHARMPARSER_COOKIE`, `PHARMPARSER_CSRF` and `PHARMPARSER_FILE_NAME` (also read from `.env`)
+take precedence over `config.json`.
 
 ### Phase 5 — Thin the UI
 - Introduce `Controller`; reduce `App` to layout + callbacks.
@@ -343,5 +364,10 @@ filtering behaviour is unchanged; blanks sort last rather than among the zeroes.
    and CI concern, not a user-facing feature. Phase 3 keeps the VBA layer and fixes B1/B12
    inside it instead of deleting it.
 2. **A headless CLI will be added.** `pharmparser.cli` becomes the end-to-end path exercised in
-   CI, and makes the scrape/export pipeline scriptable.
+   CI, and makes the scrape/export pipeline scriptable. *Done:* `pharmparser-cli`, covered by
+   `tests/integration/test_cli.py`, which runs the whole pipeline against a faked endpoint.
 3. **Execution starts at Phase 0.**
+4. **Python 3.14** is the target runtime (added 2026-08-18). This forced an `lxml` floor of 6.0.1,
+   the first release shipping cp314 wheels.
+5. **pydantic and pydantic-settings** are adopted for configuration (added 2026-08-18), which
+   pulled phase 4 forward ahead of phase 3.

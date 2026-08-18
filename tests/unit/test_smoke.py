@@ -1,28 +1,30 @@
-"""Baseline tests locking in current behaviour before the phase 1-5 rewrite.
+"""Baseline import and enum checks."""
 
-These are intentionally thin: their job is to prove the package imports and the
-test harness runs on a non-Windows machine, which was impossible before phase 0.
-"""
-
-from dataclasses import asdict
-
-from pharmparser.utils import DataType, FilterCriteria, Settings, SortOrder
+from pharmparser.config import ExportSettings
+from pharmparser.utils import FilterCriteria, SortOrder
 
 
 def test_package_imports_without_windows() -> None:
     """The Excel package must import on Linux; only COM *use* requires Windows."""
     import pharmparser.excel
-    import pharmparser.excel.spreadsheet  # noqa: F401
+    import pharmparser.excel.spreadsheet
+
+    assert pharmparser.excel.spreadsheet.Spreadsheet is not None
 
 
-def test_settings_roundtrip(settings: Settings) -> None:
-    assert asdict(settings)["fileName"] == "data.xlsx"
+def test_cli_imports_without_a_display() -> None:
+    from pharmparser.cli import build_parser
+
+    assert build_parser().prog == "pharmparser"
+
+
+def test_settings_defaults_round_trip_to_camel_case() -> None:
+    dumped = ExportSettings().model_dump(by_alias=True)
+    assert dumped["fileName"] == "data.xlsx"
+    assert dumped["colWidth"] == 50
+    assert ExportSettings.model_validate(dumped) == ExportSettings()
 
 
 def test_enums_have_stable_values() -> None:
     assert FilterCriteria.GREATER_THAN_ZERO.value == ">0"
     assert SortOrder.ASCENDING.value == "xlAscending"
-
-
-def test_datatype_alias_is_usable(price_table: DataType) -> None:
-    assert price_table["Аптека 1"]["Аспирин, 100мг"] == 5.00

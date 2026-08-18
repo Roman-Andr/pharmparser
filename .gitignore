@@ -5,6 +5,8 @@
 # swallowed test fixtures and any JSON a contributor adds.
 /config.json
 /data.json
+.cache-*.json
+.env
 *.xlsm
 *.xlsx
 

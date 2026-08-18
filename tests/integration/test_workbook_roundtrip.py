@@ -9,14 +9,14 @@ from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
 
+from pharmparser.config import ExportSettings
 from pharmparser.domain import PriceTable, absolute_difference, percentage_difference
 from pharmparser.excel.formatters import AnalysisFormatter, DataFormatter
-from pharmparser.utils import Settings
 
 SHEETS = ["Данные", "Проценты", "Анализ"]
 
 
-def build_workbook(settings: Settings, table: PriceTable) -> Workbook:
+def build_workbook(settings: ExportSettings, table: PriceTable) -> Workbook:
     wb = Workbook()
     wb.remove(wb.active)
     formatters = [
@@ -29,7 +29,7 @@ def build_workbook(settings: Settings, table: PriceTable) -> Workbook:
     return wb
 
 
-def test_workbook_saves_and_reloads(tmp_path: Path, settings: Settings, table: PriceTable) -> None:
+def test_workbook_saves_and_reloads(tmp_path: Path, settings: ExportSettings, table: PriceTable) -> None:
     target = tmp_path / "data.xlsx"
     build_workbook(settings, table).save(target)
 
@@ -55,7 +55,7 @@ def test_workbook_saves_and_reloads(tmp_path: Path, settings: Settings, table: P
     assert reloaded["Анализ"]["B4"].value == 2  # "Позиций ниже всех" — the B2 fix
 
 
-def test_conditional_formatting_survives_a_save(tmp_path: Path, settings: Settings, table: PriceTable) -> None:
+def test_conditional_formatting_survives_a_save(tmp_path: Path, settings: ExportSettings, table: PriceTable) -> None:
     target = tmp_path / "data.xlsx"
     build_workbook(settings, table).save(target)
 
@@ -63,7 +63,7 @@ def test_conditional_formatting_survives_a_save(tmp_path: Path, settings: Settin
     assert ranges == {"D4:D7", "F4:F7"}
 
 
-def test_single_pharmacy_workbook_is_still_valid(tmp_path: Path, settings: Settings) -> None:
+def test_single_pharmacy_workbook_is_still_valid(tmp_path: Path, settings: ExportSettings) -> None:
     """A profile with one pharmacy has no difference columns at all."""
     from pharmparser.domain import Pharmacy
 

@@ -2,21 +2,21 @@
 
 import pytest
 
+from pharmparser.config import ExportSettings
 from pharmparser.domain import Pharmacy, PriceTable
-from pharmparser.utils import Settings
 
 
 @pytest.fixture
-def settings() -> Settings:
+def settings() -> ExportSettings:
     """Default export settings, matching config.json.example."""
-    return Settings(
+    return ExportSettings(
         green="19CF1F",
         red="E81737",
         title="Test",
-        fileName="data.xlsx",
-        colWidth=50,
-        cellWidth=15,
-        diffWidth=10,
+        file_name="data.xlsx",
+        col_width=50,
+        cell_width=15,
+        diff_width=10,
     )
 
 

@@ -4,8 +4,8 @@ from openpyxl.styles.differential import DifferentialStyle
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
+from ...config import ExportSettings
 from ...domain import DifferenceFn, PriceTable, comparison_rows
-from ...utils import Settings
 from .base_formatter import BaseFormatter
 
 HEADER_OFFSET = 2
@@ -24,7 +24,7 @@ Cell = str | float | None
 class DataFormatter(BaseFormatter):
     __slots__ = ["difference"]
 
-    def __init__(self, settings: Settings, table: PriceTable, difference: DifferenceFn):
+    def __init__(self, settings: ExportSettings, table: PriceTable, difference: DifferenceFn):
         super().__init__(settings, table)
         self.difference = difference
 
@@ -70,10 +70,10 @@ class DataFormatter(BaseFormatter):
         grid: list[list[Cell]] = [*([] for _ in range(HEADER_OFFSET)), self._header(), *self._rows()]
         last_row = len(grid)
 
-        widths = {1: self.settings.colWidth}
+        widths = {1: self.settings.col_width}
         for column in self._difference_columns:
-            widths[column] = self.settings.diffWidth
-        self._set_column_widths(ws, widths, self.settings.cellWidth, self._total_columns)
+            widths[column] = self.settings.diff_width
+        self._set_column_widths(ws, widths, self.settings.cell_width, self._total_columns)
 
         self._apply_conditional_formatting(ws, last_row)
         ws.auto_filter.ref = f"A{HEADER_OFFSET + 1}:{get_column_letter(self._total_columns)}{last_row}"

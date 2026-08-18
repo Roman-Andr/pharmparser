@@ -3,8 +3,8 @@ from abc import ABC, abstractmethod
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
+from ...config import ExportSettings
 from ...domain import PriceTable
-from ...utils import Settings
 
 MIN_STYLED_COLUMNS = 26
 """Style at least A..Z so sheets keep their familiar width even when narrow.
@@ -18,7 +18,7 @@ formatting past ~13 pharmacies.
 class BaseFormatter(ABC):
     __slots__ = ["settings", "table"]
 
-    def __init__(self, settings: Settings, table: PriceTable):
+    def __init__(self, settings: ExportSettings, table: PriceTable):
         self.settings = settings
         self.table = table
 

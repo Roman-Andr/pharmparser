@@ -92,10 +92,30 @@ You can use **Postman** or any HTTP client to verify the request works before ru
 ## Usage
 
 ```bash
-uv run pharmparser
+uv run pharmparser            # GUI
+uv run pharmparser-cli        # headless
 ```
 
-(equivalently `uv run python -m pharmparser`)
+(the GUI is equivalently `uv run python -m pharmparser`)
+
+The CLI runs the same pipeline without a display:
+
+```bash
+uv run pharmparser-cli --profile "Основной" --output report.xlsx
+uv run pharmparser-cli --macros        # also inject the VBA buttons (Windows)
+uv run pharmparser-cli --help
+```
+
+### Keeping credentials out of the config file
+
+Session credentials may be supplied by the environment (or a `.env` file) instead of
+`config.json`, and take precedence over it:
+
+| Variable | Overrides |
+| --- | --- |
+| `PHARMPARSER_COOKIE` | `request.headers.Cookie` |
+| `PHARMPARSER_CSRF` | `request.data._csrf` |
+| `PHARMPARSER_FILE_NAME` | `settings.fileName` |
 
 1. Select or create a profile with your pharmacy URLs
 2. Click **Parse** — the app fetches current prices
@@ -109,24 +129,17 @@ uv run pharmparser
 pharmparser/
 ├── src/pharmparser/
 │   ├── __main__.py            # GUI entry point
+│   ├── cli.py                 # headless entry point
 │   ├── domain/                # pure model + analysis (no I/O, no frameworks)
 │   │   ├── models.py          # Pharmacy, PriceTable
 │   │   └── analysis.py        # comparisons, market summary
-│   ├── core/
-│   │   └── parser_engine.py   # HTTP requests & HTML parsing logic
-│   ├── ui/
-│   │   ├── app.py             # Main application window
-│   │   ├── entry.py           # Input fields
-│   │   ├── profile.py         # Profile management UI
-│   │   ├── profile_selector.py
-│   │   └── widgets.py         # Reusable UI components
-│   ├── utils/
-│   │   ├── datatypes.py
-│   │   ├── file_utils.py
-│   │   ├── filter_criteria.py
-│   │   ├── request.py         # Request builder
-│   │   ├── settings.py        # Config loader
-│   │   └── sort_order.py
+│   ├── config/                # pydantic schema, loader, env overrides
+│   ├── scraping/              # async client, pure HTML parser, fan-out service
+│   ├── export.py              # price table -> workbook
+│   ├── cache.py               # per-profile scrape cache
+│   ├── platform_.py           # OS capability probes
+│   ├── ui/                    # CustomTkinter windows and widgets
+│   ├── utils/                 # small shared enums and helpers
 │   └── excel/                 # Excel formatting, macros and export
 ├── tests/
 │   ├── unit/
@@ -165,8 +178,9 @@ so the fix cannot land silently.
 | Layer | Library |
 | --- | --- |
 | GUI | [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) |
-| HTTP | `http.client` (moving to `aiohttp`) |
+| HTTP | `aiohttp` |
 | Parsing | `beautifulsoup4`, `lxml` |
+| Config | `pydantic`, `pydantic-settings` |
 | Export | `openpyxl`, `pywin32` (Windows COM/VBA) |
 | Packaging | `pyinstaller` |
 

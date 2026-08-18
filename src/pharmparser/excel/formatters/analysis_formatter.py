@@ -14,7 +14,7 @@ class AnalysisFormatter(BaseFormatter):
     def format(self, ws: Worksheet) -> None:
         summary = summarise(self.table)
         self._set_column_widths(
-            ws, {1: self.settings.colWidth}, self.settings.cellWidth, BREAKDOWN_COLUMNS
+            ws, {1: self.settings.col_width}, self.settings.cell_width, BREAKDOWN_COLUMNS
         )
         breakdown: list[list[Cell]] = [
             [stats.pharmacy.name, stats.assortment, stats.dearer, stats.cheaper, stats.unique]

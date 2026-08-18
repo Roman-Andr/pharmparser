@@ -15,17 +15,22 @@ dependencies = [
     "psutil>=7.0.0",
     # Excel macro injection (.xlsm buttons) is Windows-only; the rest of the
     # package must stay installable and testable everywhere.
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
     "pywin32>=311; sys_platform == 'win32'",
 ]
 
 [project.scripts]
 pharmparser = "pharmparser.__main__:main"
+pharmparser-cli = "pharmparser.cli:main"
 
 [dependency-groups]
 dev = [
+    "aioresponses>=0.7",
     "mypy>=1.14",
     "pre-commit>=4.0",
     "pytest>=8.3",
+    "pytest-asyncio>=0.25",
     "pytest-cov>=6.0",
     "ruff>=0.9",
 ]
@@ -89,6 +94,7 @@ check_untyped_defs = false
 minversion = "8.0"
 testpaths = ["tests"]
 addopts = "-ra --strict-markers --strict-config"
+asyncio_mode = "auto"
 
 [tool.coverage.run]
 source = ["src/pharmparser"]

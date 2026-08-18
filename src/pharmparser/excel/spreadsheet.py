@@ -4,7 +4,9 @@ from itertools import chain
 from openpyxl.utils import get_column_letter
 from openpyxl.workbook import Workbook
 
-from ..utils import DataType, FilterCriteria, Settings, SortOrder
+from ..config import ExportSettings
+from ..domain import PriceTable
+from ..utils import FilterCriteria, SortOrder
 from ..utils.file_utils import clean_temp_files, remove
 from .formatters import BaseFormatter, DataFormatter
 from .macros import ApplyFiltersMacro, Button, RemoveFiltersMacro, SortMacro
@@ -36,20 +38,23 @@ class ExcelManager:
 
 
 class Spreadsheet:
-    __slots__ = ["data", "formatters", "settings"]
+    __slots__ = ["formatters", "settings", "table"]
 
-    def __init__(self, data: DataType, settings: Settings, formatters: list[tuple[BaseFormatter, str]]):
-        self.data = data
+    def __init__(
+        self, table: PriceTable, settings: ExportSettings, formatters: list[tuple[BaseFormatter, str]]
+    ):
+        self.table = table
         self.settings = settings
         self.formatters = formatters
 
-    def export(self, data: DataType):
+    def export(self) -> str:
+        """Write the workbook and return the path of the .xlsm actually produced."""
         from win32api import RGB
 
         with ExcelManager() as excel:
             try:
                 for workbook in excel.Workbooks:
-                    if workbook.FullName == os.path.abspath(self.settings.fileName.replace('.xlsx', '.xlsm')):
+                    if workbook.FullName == os.path.abspath(self.settings.macro_file_name):
                         workbook.Close(SaveChanges=False)
                         break
             except Exception:
@@ -57,8 +62,8 @@ class Spreadsheet:
 
         wb = Workbook()
         wb.remove(wb.active)
-        end_column = len(data) * 2
-        target = self.settings.fileName.replace('.xlsx', '.xlsm')
+        end_column = len(self.table.pharmacies) * 2
+        target = self.settings.macro_file_name
         clean_temp_files(target)
         sheet_titles = []
         for formatter, title in self.formatters:
@@ -66,10 +71,10 @@ class Spreadsheet:
             formatter.format(sheet)
             if isinstance(formatter, DataFormatter):
                 sheet_titles.append(title)
-        wb.save(self.settings.fileName)
+        wb.save(self.settings.file_name)
         for i, sheet_name in enumerate(sheet_titles):
             with ExcelManager() as excel:
-                inject(excel, i + 1, self.settings.fileName if i == 0 else f"{i - 1}{target}", [
+                inject(excel, i + 1, self.settings.file_name if i == 0 else f"{i - 1}{target}", [
                     Button('A1', 'Apply Filters',
                            ApplyFiltersMacro(end_column, FilterCriteria.GREATER_THAN_ZERO, sheet_name),
                            back_color=RGB(18, 230, 89),
@@ -84,8 +89,9 @@ class Spreadsheet:
                           for col in [get_column_letter(x) for x in range(4, end_column + 2, 2)]])
                 ], f"{i}{target}")
             remove(f"{i - 1}{target}")
-        os.rename(f"{len(sheet_titles) - 1}{target}", target)
-        remove(self.settings.fileName)
+        os.replace(f"{len(sheet_titles) - 1}{target}", target)
+        remove(self.settings.file_name)
+        return target
 
 
 def inject(excel, btn_id, file_path, buttons, new_file_path):
