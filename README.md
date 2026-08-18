@@ -139,6 +139,7 @@ pharmparser/
 │   │   ├── grids.py           # pure sheet builders (content + layout)
 │   │   ├── xlsx_writer.py     # the only module that knows openpyxl
 │   │   └── vba/               # Windows-only macro buttons, imported lazily
+│   ├── controller.py          # state + use cases, driven by both front ends
 │   ├── cache.py               # per-profile scrape cache
 │   ├── platform_.py           # OS capability probes
 │   └── ui/                    # CustomTkinter windows and widgets

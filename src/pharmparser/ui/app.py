@@ -1,4 +1,11 @@
-import asyncio
+"""The window: widgets, layout and callbacks. No business logic.
+
+Everything the app *does* lives in :class:`~pharmparser.ui.controller.Controller`;
+this module only draws it and marshals results back onto the main thread.
+"""
+
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 from threading import Thread
@@ -6,35 +13,50 @@ from threading import Thread
 from CTkMessagebox import CTkMessagebox
 from customtkinter import CTk, CTkButton, CTkCheckBox, CTkProgressBar
 
-from ..cache import read_table, write_table
-from ..config import AppConfig, ConfigError, cache_path, config_path, load_config, save_config
+from ..config import AppConfig, ConfigError, config_path
 from ..config import Profile as ProfileConfig
-from ..domain import PriceTable
-from ..export import select_exporter
+from ..controller import Controller
 from ..platform_ import open_file
-from ..scraping import NoPharmaciesError, ScrapeError, scrape_profile
+from ..scraping import NoPharmaciesError, ScrapeError
 from .profile import Profile
 from .profile_selector import ProfileSelector
 
 logger = logging.getLogger(__name__)
 
+EXPECTED_FAILURES = (ConfigError, NoPharmaciesError, ScrapeError)
+"""Errors with a message worth showing the user verbatim."""
+
 
 class App(CTk):
+    """The main window.
+
+    ``self.config`` is deliberately *not* used for application state: it is
+    ``tkinter.Misc.config``, the alias of ``configure``, and shadowing it made any
+    call to it raise ``TypeError: 'str' object is not callable`` (B3).
+    """
+
     processing: bool = False
 
-    def __init__(self, config: AppConfig | None = None, config_file: Path | None = None):
+    def __init__(
+        self,
+        config: AppConfig | None = None,
+        config_file: Path | None = None,
+        controller: Controller | None = None,
+    ):
         super().__init__()
 
-        self.config_file = config_file or config_path()
-        self.app_config = config if config is not None else load_config(self.config_file)
+        if controller is not None:
+            self.controller = controller
+        elif config is not None:
+            self.controller = Controller(config, config_file or config_path())
+        else:
+            self.controller = Controller.load(config_file)
 
         self.geometry("1100x600")
         self.title("PharmParser")
 
         self.progress: CTkProgressBar = CTkProgressBar(self)
-        self.profiles: list[Profile] = [
-            Profile(self, profile) for profile in self.app_config.profiles
-        ] or [Profile(self, ProfileConfig(name="Profile 1"))]
+        self.profiles: list[Profile] = [Profile(self, profile) for profile in self.controller.profiles]
         self.current_profile: Profile | None = None
 
         CTkButton(self, text="Add", command=self.add_entry).grid(row=1, column=0, padx=30, pady=5)
@@ -93,31 +115,14 @@ class App(CTk):
         version called CTkMessagebox and mutated the progress bar from here).
         """
         try:
-            table = self._collect(profile, use_cache)
-            path = self._write(table)
-        except (ConfigError, NoPharmaciesError, ScrapeError) as error:
+            path = self.controller.run(profile, use_cache)
+        except EXPECTED_FAILURES as error:
             self.after(0, self._failed, str(error))
-        except Exception:
+        except Exception as error:
             logger.exception("Parsing failed")
-            self.after(0, self._failed, "Unexpected error — see the log for details.")
+            self.after(0, self._failed, f"{type(error).__name__}: {error}")
         else:
             self.after(0, self._succeeded, path)
-
-    def _collect(self, profile: ProfileConfig, use_cache: bool) -> PriceTable:
-        cache_file = cache_path(profile.name)
-        if use_cache and cache_file.exists():
-            try:
-                return read_table(cache_file)
-            except Exception:
-                logger.warning("Ignoring unreadable cache at %s", cache_file, exc_info=True)
-
-        table = asyncio.run(scrape_profile(self.app_config.request, profile.pharmacies))
-        write_table(table, cache_file)
-        return table
-
-    def _write(self, table: PriceTable) -> Path:
-        settings = self.app_config.settings
-        return select_exporter().export(settings, table).absolute()
 
     def _succeeded(self, path: Path) -> None:
         self._stop_progress()
@@ -134,14 +139,10 @@ class App(CTk):
 
     # -- persistence -----------------------------------------------------------
 
-    def current_config(self) -> AppConfig:
-        return self.app_config.model_copy(
-            update={"profiles": [profile.to_config() for profile in self.profiles]}
-        )
-
     def on_closing(self) -> None:
         try:
-            save_config(self.current_config(), self.config_file)
-        except Exception:
-            logger.exception("Could not save %s", self.config_file)
+            self.controller.save([profile.to_config() for profile in self.profiles])
+        except Exception as error:
+            logger.exception("Could not save %s", self.controller.config_file)
+            CTkMessagebox(title="Could not save", message=str(error), icon="warning")
         self.destroy()

@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Any
+
 from ..config import PharmacyEntry
 from ..config import Profile as ProfileConfig
 from .entry import Entry
@@ -6,9 +10,7 @@ from .entry import Entry
 class Profile:
     """The widgets for one profile's pharmacy list."""
 
-    __slots__ = ["entries", "name", "parent"]
-
-    def __init__(self, parent, config: ProfileConfig):
+    def __init__(self, parent: Any, config: ProfileConfig) -> None:
         self.parent = parent
         self.name = config.name
         self.entries = [

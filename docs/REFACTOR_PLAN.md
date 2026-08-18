@@ -404,13 +404,42 @@ atomic and profile names are preserved (A6). Caches are per profile and versione
 `PHARMPARSER_COOKIE`, `PHARMPARSER_CSRF` and `PHARMPARSER_FILE_NAME` (also read from `.env`)
 take precedence over `config.json`.
 
-### Phase 5 — Thin the UI
+### Phase 5 — Thin the UI — **done**
 - Introduce `Controller`; reduce `App` to layout + callbacks.
 - Fix **B3** (rename `self.config`), **B5** (all Tk mutation via `after`), and surface real errors
   to the user.
 - Remove the cargo-culted `__slots__` (**A8**); move `create_custom_entry` out of `utils` into
   `ui/widgets` (**A3**).
 - **Exit criteria:** `Controller` is exercised headless; `App` contains no business logic.
+
+**Outcome.** `pharmparser/controller.py` owns config load/save, profile selection, the
+cache decision, the scrape and the export. It sits *above* both front ends rather than
+inside `ui/`, because the CLI drives it too — `cli.main` is now twelve lines of argument
+handling around `Controller.load(...)`, `select_profile(...)` and `run(...)`, so the GUI
+and the headless path cannot drift apart. The scrape and the exporter are injected, so
+`tests/unit/test_controller.py` exercises every use case with no network, no Excel and no
+display.
+
+`App` is down to widgets, callbacks and thread marshalling: `add_entry`, `delete_entry`,
+`click`, `on_closing` and three private handlers. B3 and B5 were already fixed in an
+earlier phase and stay fixed — application state lives on `self.controller`, never on
+`self.config` (which is `tkinter.Misc.configure`), and the worker thread touches no widget.
+Errors now reach the user in both directions: an unexpected exception is shown by type and
+message rather than as "see the log", and a failed save raises a dialog instead of being
+swallowed.
+
+**A3 is finished.** `ui/__init__.py` resolves widget classes through a module `__getattr__`,
+so importing the package pulls in no toolkit — the exact inversion of the original problem,
+where `import utils` dragged customtkinter into the scraper. A test asserts that importing
+the controller, the CLI and `pharmparser.ui` leaves `tkinter` unloaded.
+
+**A7 is finished.** The cache is now genuinely opt-in: reading and writing it are one
+choice, so an unticked checkbox writes nothing. `pharmparser-cli --cache` exposes the same
+behaviour, and is covered by a test that runs twice with no stubbed endpoint on the second
+pass.
+
+**A8.** `__slots__` is gone from `Entry` and `Profile`. The `pharmparser.ui.*` mypy
+exemption is gone with it, and `check_untyped_defs` is now on for the whole project.
 
 ### Phase 6 — Docs and release
 - README: architecture, the VBA-trust prerequisite (**P8**), cross-platform behaviour, contributor

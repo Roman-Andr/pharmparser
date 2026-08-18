@@ -1,6 +1,11 @@
+from __future__ import annotations
+
+from typing import Any
+
 from customtkinter import CTkSegmentedButton
 
 from ..config import Profile as ProfileConfig
+from ..controller import Controller
 from .profile import Profile
 
 
@@ -11,7 +16,7 @@ class ProfileSelector(CTkSegmentedButton):
     user chose could not survive a restart (A6).
     """
 
-    def __init__(self, app, profiles: list[Profile], **kwargs):
+    def __init__(self, app: Any, profiles: list[Profile], **kwargs: Any) -> None:
         super().__init__(app, **kwargs)
         self.app = app
         self.profiles = profiles
@@ -26,13 +31,6 @@ class ProfileSelector(CTkSegmentedButton):
     def _refresh(self) -> None:
         self.configure(values=self._names(), command=self.change_profile)
 
-    def _unique_name(self) -> str:
-        existing = set(self._names())
-        index = len(self.profiles) + 1
-        while f"Profile {index}" in existing:
-            index += 1
-        return f"Profile {index}"
-
     def change_profile(self, name: str) -> None:
         for profile in self.profiles:
             profile.hide()
@@ -43,7 +41,7 @@ class ProfileSelector(CTkSegmentedButton):
         selected.display()
 
     def add(self) -> None:
-        name = self._unique_name()
+        name = Controller.next_profile_name(self._names())
         self.profiles.append(Profile(self.app, ProfileConfig(name=name)))
         self._refresh()
         self.set(name)

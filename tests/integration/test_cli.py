@@ -119,3 +119,31 @@ def test_macros_flag_degrades_gracefully_off_windows(
         assert main(["--config", str(config_file), "--output", str(output), "--macros"]) == 0
     assert output.exists()
     assert "Windows only" in caplog.text
+
+
+def test_cache_flag_reuses_a_cached_run(config_file: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """--cache makes the second run answer from disk without touching the network."""
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    first = tmp_path / "first.xlsx"
+    second = tmp_path / "second.xlsx"
+
+    with aioresponses() as mocked:
+        stub_two_pharmacies(mocked)
+        assert main(["--config", str(config_file), "--output", str(first), "--cache"]) == 0
+
+    # No stubs registered: any request at all would fail.
+    with aioresponses():
+        assert main(["--config", str(config_file), "--output", str(second), "--cache"]) == 0
+
+    assert load_workbook(second).sheetnames == load_workbook(first).sheetnames
+
+
+def test_without_the_cache_flag_nothing_is_written_to_the_cache(
+    config_file: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache_home = tmp_path / "cache"
+    monkeypatch.setenv("XDG_CACHE_HOME", str(cache_home))
+    with aioresponses() as mocked:
+        stub_two_pharmacies(mocked)
+        assert main(["--config", str(config_file), "--output", str(tmp_path / "r.xlsx")]) == 0
+    assert not list(cache_home.rglob("*.json"))
