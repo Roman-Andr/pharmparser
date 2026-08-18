@@ -1,6 +1,10 @@
 # PharmParser — Refactor Plan
 
-**Status:** proposal · **Scope:** whole codebase (~770 LOC across 24 Python files) · **Author:** generated from a full read of every source file at `b80debc`
+**Status:** all six phases complete · **Scope:** whole codebase (~770 LOC across 24 Python files at the
+starting point) · **Origin:** a full read of every source file at `b80debc`
+
+Every phase below records what it actually changed under an **Outcome** heading. One finding
+remains open — **B16** needs a decision from the user; see §5a.
 
 ---
 
