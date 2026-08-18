@@ -105,6 +105,14 @@ Harmless today, but symptomatic: the export writes `0data.xlsm`, `1data.xlsm`, �
 `os.rename`s the last one over `target` with no overwrite handling, and opens/quits a **whole
 Excel process per sheet**.
 
+**B14 — Duplicate pharmacy names corrupt the sheet.** Both the header builder in
+`data_formatter.py` and the loop bound test `x != self.titles[-1]` compare *by value*, not by
+index. Two pharmacies sharing a name make the header stop a column early while the data rows
+still carry every price, so header and data misalign for the rest of the sheet. The same
+duplicate also silently collapses in `dict(zip(titles, parse_res))` in `ParserEngine.process`.
+Found while rewriting the header construction in phase 0; fix belongs with the domain model in
+phase 1 (pharmacies need a stable identity separate from their display name).
+
 **B13 — `Request.url` is configured but ignored.** `utils/request.py` hardcodes
 `HTTPSConnection("tabletka.by")` and `/ajax-request/reload-pharmacy-price/` while the `url` field
 from `config.json` is loaded and never read. Changing the endpoint in config does nothing. There

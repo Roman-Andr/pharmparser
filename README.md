@@ -16,7 +16,7 @@
 
 ## Requirements
 
-- Python 3.13+
+- Python 3.12+
 - [`uv`](https://github.com/astral-sh/uv) package manager
 
 ---
@@ -28,6 +28,11 @@ git clone https://github.com/RomanAndr/pharmparser.git
 cd pharmparser
 uv sync
 ```
+
+> **Windows only:** generating the `.xlsm` workbook drives Excel over COM and writes a VBA
+> module, which requires Excel's *Trust access to the VBA project object model* setting.
+> Enable it under **File → Options → Trust Center → Trust Center Settings → Macro Settings**.
+> Without it the export fails with an opaque COM error.
 
 ---
 
@@ -87,8 +92,10 @@ You can use **Postman** or any HTTP client to verify the request works before ru
 ## Usage
 
 ```bash
-uv run main.py
+uv run pharmparser
 ```
+
+(equivalently `uv run python -m pharmparser`)
 
 1. Select or create a profile with your pharmacy URLs
 2. Click **Parse** — the app fetches current prices
@@ -100,26 +107,51 @@ uv run main.py
 
 ```bash
 pharmparser/
-├── core/
-│   └── parser_engine.py   # HTTP requests & HTML parsing logic
-├── ui/
-│   ├── app.py             # Main application window
-│   ├── entry.py           # Input fields
-│   ├── profile.py         # Profile management UI
-│   └── profile_selector.py
-├── utils/
-│   ├── datatypes.py
-│   ├── file_utils.py      # Excel export
-│   ├── filter_criteria.py
-│   ├── request.py         # Request builder
-│   ├── settings.py        # Config loader
-│   ├── sort_order.py
-│   └── widgets.py         # Reusable UI components
-├── excel/                 # Excel formatting helpers
-├── main.py
+├── src/pharmparser/
+│   ├── __main__.py            # GUI entry point
+│   ├── core/
+│   │   └── parser_engine.py   # HTTP requests & HTML parsing logic
+│   ├── ui/
+│   │   ├── app.py             # Main application window
+│   │   ├── entry.py           # Input fields
+│   │   ├── profile.py         # Profile management UI
+│   │   ├── profile_selector.py
+│   │   └── widgets.py         # Reusable UI components
+│   ├── utils/
+│   │   ├── datatypes.py
+│   │   ├── file_utils.py
+│   │   ├── filter_criteria.py
+│   │   ├── request.py         # Request builder
+│   │   ├── settings.py        # Config loader
+│   │   └── sort_order.py
+│   └── excel/                 # Excel formatting, macros and export
+├── tests/
+├── docs/REFACTOR_PLAN.md      # in-progress restructuring plan
 ├── config.json.example
 └── pyproject.toml
 ```
+
+> The layout above is mid-refactor. See [`docs/REFACTOR_PLAN.md`](docs/REFACTOR_PLAN.md)
+> for the target architecture and the phased plan to get there.
+
+---
+
+## Development
+
+```bash
+uv sync --all-groups     # runtime + dev + build dependencies
+uv run pytest            # tests
+uv run ruff check .      # lint
+uv run mypy              # type check
+uv run pre-commit install
+```
+
+The package installs and the test suite runs on Linux and macOS as well as Windows;
+only the Excel/COM macro-injection step is Windows-specific.
+
+Tests marked `xfail(strict=True)` pin known bugs that are documented in the refactor
+plan and fixed in a later phase — if one starts passing unexpectedly, the suite fails,
+so the fix cannot land silently.
 
 ---
 
@@ -128,9 +160,9 @@ pharmparser/
 | Layer | Library |
 | --- | --- |
 | GUI | [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) |
-| HTTP | `requests`, `aiohttp` |
+| HTTP | `http.client` (moving to `aiohttp`) |
 | Parsing | `beautifulsoup4`, `lxml` |
-| Export | `openpyxl`, `pandas` |
+| Export | `openpyxl`, `pywin32` (Windows COM/VBA) |
 | Packaging | `pyinstaller` |
 
 ---
