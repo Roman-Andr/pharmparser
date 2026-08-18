@@ -1,0 +1,77 @@
+{
+  "profiles": {
+    "Profile 1": {
+      "Аптека 195/3": "https://tabletka.by/pharmacies/3563",
+      "Добрые леки": "https://tabletka.by/pharmacies/3345",
+      "ФармОстров Зарко": "https://tabletka.by/pharmacies/7603",
+      "InLek": "https://tabletka.by/pharmacies/1399",
+      "Астра Фарм": "https://tabletka.by/pharmacies/8337",
+      "Добрые леки 75": "https://tabletka.by/pharmacies/3152",
+      "Планета Здоровья": "https://tabletka.by/pharmacies/1278",
+      "ФармОстров 61A": "https://tabletka.by/pharmacies/7614",
+      "Добрые леки Соседи": "https://tabletka.by/pharmacies/2510"
+    },
+    "Profile 2": {
+      "Аптека 162/4": "https://tabletka.by/pharmacies/7973",
+      "ADEL победы,8": "https://tabletka.by/pharmacies/403",
+      "Моя аптека": "https://tabletka.by/pharmacies/10",
+      "Искамед ": "https://tabletka.by/pharmacies/381",
+      "ADEL  Сов.40А": "https://tabletka.by/pharmacies/568"
+    },
+    "Profile 3": {
+      "Аптека 192": "https://tabletka.by/pharmacies/5272",
+      "Добрые леки Октября 34": "https://tabletka.by/pharmacies/380",
+      "ФармОстров  Лиз 18": "https://tabletka.by/pharmacies/7854"
+    },
+    "Profile 4": {
+      "аптека 2": "https://tabletka.by/pharmacies/5274",
+      "ремедика 1": "https://tabletka.by/pharmacies/3123",
+      "ремедика 2": "https://tabletka.by/pharmacies/7475"
+    },
+    "Profile 5": {
+      "2-2": "https://tabletka.by/pharmacies/2930",
+      "ремедика 1": "https://tabletka.by/pharmacies/7475",
+      "ремедика 2": "https://tabletka.by/pharmacies/3123"
+    },
+    "Profile 6": {
+      "№1": "https://tabletka.by/pharmacies/1953",
+      "Леки": "https://tabletka.by/pharmacies/986",
+      "АстраФарм": "https://tabletka.by/pharmacies/8226",
+      "Планета": "https://tabletka.by/pharmacies/696",
+      "ДокторПланета": "https://tabletka.by/pharmacies/1026",
+      "ЛекиЭканом": "https://tabletka.by/pharmacies/381",
+      "Искамед": "https://tabletka.by/pharmacies/2832",
+      "ФармОстров": "https://tabletka.by/pharmacies/3261"
+    }
+  },
+  "settings": {
+    "green": "19CF1F",
+    "red": "E81737",
+    "title": "Анализ",
+    "fileName": "data.xlsx",
+    "colWidth": 45,
+    "cellWidth": 13,
+    "diffWidth": 9
+  },
+  "request": {
+    "url": "https://tabletka.by/ajax-request/reload-pharmacy-price",
+    "headers": {
+      "sec-ch-ua-platform": "\"Windows\"",
+      "X-Requested-With": "XMLHttpRequest",
+      "Accept": "application/json, text/javascript, */*; q=0.01",
+      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "sec-ch-ua-mobile": "?0",
+      "Sec-Fetch-Site": "same-origin",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Dest": "empty",
+      "host": "tabletka.by",
+      "Cookie": "PHPSESSID=REDACTED; _csrf=REDACTED; allow-cookies=; lim-result=5000; region=%D0%93%D0%BE%D0%BC%D0%B5%D0%BB%D1%8C; regionId=36"
+    },
+    "data": {
+      "sort": "name",
+      "sort_type": "asc",
+      "str": "",
+      "_csrf": "REDACTED=="
+    }
+  }
+}

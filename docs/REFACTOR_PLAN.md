@@ -113,6 +113,12 @@ duplicate also silently collapses in `dict(zip(titles, parse_res))` in `ParserEn
 Found while rewriting the header construction in phase 0; fix belongs with the domain model in
 phase 1 (pharmacies need a stable identity separate from their display name).
 
+**B15 — `settings.title` is dead configuration.** It is loaded, validated and written back,
+but nothing reads it — verified by grep across the whole package. A real user's config sets it to
+`"Анализ"`, so it plainly *looks* meaningful. Either wire it up (the natural home is a caption on
+the analysis sheet, or the workbook's document title) or drop it; silently ignoring a value the
+user set is the worst of the three options. Deferred to phase 3, which owns the sheet layout.
+
 **B13 — `Request.url` is configured but ignored.** `utils/request.py` hardcodes
 `HTTPSConnection("tabletka.by")` and `/ajax-request/reload-pharmacy-price/` while the `url` field
 from `config.json` is loaded and never read. Changing the endpoint in config does nothing. There
@@ -292,6 +298,13 @@ filtering behaviour is unchanged; blanks sort last rather than among the zeroes.
 timeouts, retries and backoff, validating the JSON envelope with pydantic) and `service`
 (bounded-concurrency fan-out to a `PriceTable`). `multiprocessing.Pool` and the realtime-priority
 calls are gone. B4, B6, B7, B8, B11 and B13 are fixed with regression tests.
+
+**Validated against a real config.** `tests/fixtures/real_world_config.json` is an actual user
+configuration with the credentials redacted: six profiles, Cyrillic and Latin pharmacy names,
+names with trailing and doubled spaces, a pharmacy id reused across profiles, a full browser
+header set (lowercase `host`, explicit `Content-Type` alongside form-encoded data) and non-default
+column widths. It loads, round-trips byte-for-byte, scrapes and exports —
+`tests/integration/test_real_world_config.py` keeps it that way.
 
 **Fixtures are synthetic.** `tests/fixtures/*.html` were reconstructed from the CSS selectors the
 old engine used, not captured from tabletka.by. They pin the parser's contract — row scoping,
