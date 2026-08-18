@@ -1,71 +1,71 @@
 # PharmParser
 
-> Desktop application for parsing and comparing drug prices from [tabletka.by](https://tabletka.by) pharmacies. Exports results to a formatted Excel spreadsheet.
+> Desktop application for parsing and comparing drug prices from [tabletka.by](https://tabletka.by)
+> pharmacies. Exports results to a formatted Excel workbook.
 
 ---
 
 ## Features
 
-- Parse prices from multiple pharmacies in one click
-- Compare prices across pharmacies with color-coded highlighting
+- Parse prices from many pharmacies at once, concurrently
+- Compare every price against a reference pharmacy, with colour-coded differences
 - Multi-profile support — save different pharmacy sets and switch between them
-- Export results to `.xlsx` with customizable column widths and color settings
-- Clean GUI built with CustomTkinter (supports light/dark/system theme)
+- Export to `.xlsx` anywhere, or to `.xlsm` with VBA sort/filter buttons on Windows
+- A GUI built with CustomTkinter, and a headless CLI running the same pipeline
 
 ---
 
 ## Requirements
 
 - Python 3.14+
-- [`uv`](https://github.com/astral-sh/uv) package manager
+- [`uv`](https://github.com/astral-sh/uv)
+
+The package installs and runs on Linux, macOS and Windows. Only the macro buttons need
+Windows; everything else — scraping, analysis and the `.xlsx` export — is cross-platform.
 
 ---
 
 ## Installation
 
 ```bash
-git clone https://github.com/RomanAndr/pharmparser.git
+git clone https://github.com/Roman-Andr/pharmparser.git
 cd pharmparser
 uv sync
 ```
 
-> **Windows only:** generating the `.xlsm` workbook drives Excel over COM and writes a VBA
-> module, which requires Excel's *Trust access to the VBA project object model* setting.
-> Enable it under **File → Options → Trust Center → Trust Center Settings → Macro Settings**.
-> Without it the export fails with an opaque COM error.
+> **Windows only:** writing the `.xlsm` workbook drives Excel over COM and adds a VBA
+> module, which needs Excel's *Trust access to the VBA project object model* setting.
+> Enable it under **File → Options → Trust Center → Trust Center Settings → Macro
+> Settings**. Without it the export fails with an opaque COM error.
 
 ---
 
 ## Configuration
 
-Copy the example config and fill in your session credentials:
-
 ```bash
 cp config.json.example config.json
 ```
-
-`config.json` structure:
 
 ```jsonc
 {
   "profiles": {
     "Profile 1": {
-      "1": "https://tabletka.by/pharmacies/****"  // pharmacy page URL
+      "Аптека 1": "https://tabletka.by/pharmacies/****"  // pharmacy page URL
     }
   },
   "settings": {
-    "green": "19CF1F",     // color for lower price
-    "red": "E81737",       // color for higher price
-    "title": "My Report",
+    "green": "19CF1F",     // fill for a competitor price above the reference
+    "red": "E81737",       // fill for a competitor price below the reference
+    "title": "Анализ",     // names the summary sheet and the workbook
     "fileName": "data.xlsx",
-    "colWidth": 50,
-    "cellWidth": 15,
-    "diffWidth": 10
+    "colWidth": 50,        // width of the item-name column
+    "cellWidth": 15,       // width of a price column
+    "diffWidth": 10        // width of a "Разница" column
   },
   "request": {
     "url": "https://tabletka.by/ajax-request/reload-pharmacy-price",
     "headers": {
-      "Cookie": "PHPSESSID=...; _csrf=...; regionId=..."
+      "Cookie": "PHPSESSID=...; _csrf=...; regionId=...; lim-result=5000"
     },
     "data": {
       "sort": "name",
@@ -77,39 +77,26 @@ cp config.json.example config.json
 }
 ```
 
-### How to get your session cookies
+The first pharmacy in a profile is the **reference**: every other one is compared against
+it. Values are validated on load, and a bad one names itself — a malformed colour, a
+non-positive width, a pharmacy URL without a numeric id, a `title` Excel would reject as a
+sheet name, or two pharmacies in one profile sharing a display name.
 
-1. Open [tabletka.by](https://tabletka.by) in your browser and log in
-2. Open DevTools → **Network** tab
-3. Make any request to the pharmacy prices page
-4. Copy the `Cookie` header value and the `_csrf` token from the request payload
+### Getting your session cookies
+
+1. Open [tabletka.by](https://tabletka.by) in your browser
+2. Open DevTools → **Network**
+3. Load any pharmacy's price page
+4. Copy the `Cookie` request header and the `_csrf` value from the request payload
 5. Paste them into `config.json`
 
-You can use **Postman** or any HTTP client to verify the request works before running the app.
-
----
-
-## Usage
-
-```bash
-uv run pharmparser            # GUI
-uv run pharmparser-cli        # headless
-```
-
-(the GUI is equivalently `uv run python -m pharmparser`)
-
-The CLI runs the same pipeline without a display:
-
-```bash
-uv run pharmparser-cli --profile "Основной" --output report.xlsx
-uv run pharmparser-cli --macros        # also inject the VBA buttons (Windows)
-uv run pharmparser-cli --help
-```
+The cookie must include `lim-result=5000` — the app rewrites that value to page through
+results. Cookies expire; when scraping starts failing, this is the first thing to refresh.
 
 ### Keeping credentials out of the config file
 
-Session credentials may be supplied by the environment (or a `.env` file) instead of
-`config.json`, and take precedence over it:
+Credentials can come from the environment (or a `.env` file) instead, and take precedence
+over `config.json`:
 
 | Variable | Overrides |
 | --- | --- |
@@ -117,61 +104,128 @@ Session credentials may be supplied by the environment (or a `.env` file) instea
 | `PHARMPARSER_CSRF` | `request.data._csrf` |
 | `PHARMPARSER_FILE_NAME` | `settings.fileName` |
 
-1. Select or create a profile with your pharmacy URLs
-2. Click **Parse** — the app fetches current prices
-3. The result is saved as an `.xlsx` file defined in `fileName`
+`config.json`, `.env` and the cache files are all git-ignored by name. The ignore rule is
+deliberately narrow rather than a blanket `*.json`, which used to swallow test fixtures
+too — so check what you are committing if you add JSON of your own.
 
 ---
 
-## Project Structure
+## Usage
+
+```bash
+uv run pharmparser        # GUI (same as: uv run python -m pharmparser)
+uv run pharmparser-cli    # headless
+```
+
+In the GUI: pick or create a profile, fill in pharmacy names and URLs, press **Parse**.
+The workbook opens when it is ready. Tick **Cache** to reuse the last scrape for that
+profile instead of hitting the network — the cache is per profile and entirely opt-in.
+
+The CLI runs the same pipeline:
+
+```bash
+uv run pharmparser-cli --profile "Основной" --output report.xlsx
+uv run pharmparser-cli --macros    # also inject the VBA buttons (Windows)
+uv run pharmparser-cli --cache     # reuse this profile's cached prices
+uv run pharmparser-cli --help
+```
+
+Every run also appends to a rotating `pharmparser.log` beside the config file, which is
+the thing to look at — or ask a user for — when something goes wrong.
+
+### What is in the workbook
+
+| Sheet | Contents |
+| --- | --- |
+| `Данные` | One row per item: the reference price, then each competitor's price and the difference in roubles |
+| `Проценты` | The same layout, with differences as a percentage of the reference price |
+| `settings.title` | Assortment sizes, items cheapest everywhere, unique items, and a per-competitor breakdown |
+
+A blank difference cell means the comparison is undefined — one of the two pharmacies does
+not stock the item. That is distinct from a difference of `0`, which means the prices match.
+
+On Windows the two price sheets also carry buttons: **Apply Filters** / **Remove Filters**,
+and an up/down pair over each difference column.
+
+---
+
+## Architecture
+
+The rule that holds the layout together: **the domain layer imports nothing from
+`openpyxl`, `customtkinter`, `win32com`, or the network.**
 
 ```bash
 pharmparser/
 ├── src/pharmparser/
 │   ├── __main__.py            # GUI entry point
 │   ├── cli.py                 # headless entry point
+│   ├── controller.py          # state + use cases, driven by both front ends
 │   ├── domain/                # pure model + analysis (no I/O, no frameworks)
 │   │   ├── models.py          # Pharmacy, PriceTable
 │   │   └── analysis.py        # comparisons, market summary
-│   ├── config/                # pydantic schema, loader, env overrides
+│   ├── config/                # pydantic schema, loader, paths, env overrides
 │   ├── scraping/              # async client, pure HTML parser, fan-out service
-│   ├── export/                # price table -> workbook
+│   ├── export/
 │   │   ├── grids.py           # pure sheet builders (content + layout)
 │   │   ├── xlsx_writer.py     # the only module that knows openpyxl
+│   │   ├── protocols.py       # the Exporter contract
 │   │   └── vba/               # Windows-only macro buttons, imported lazily
-│   ├── controller.py          # state + use cases, driven by both front ends
 │   ├── cache.py               # per-profile scrape cache
+│   ├── logging_.py            # console + rotating file logging
 │   ├── platform_.py           # OS capability probes
 │   └── ui/                    # CustomTkinter windows and widgets
-├── tests/
-│   ├── unit/
-│   └── integration/           # workbook round-trip, no Excel required
-├── docs/REFACTOR_PLAN.md      # in-progress restructuring plan
-├── config.json.example
-└── pyproject.toml
+├── packaging/                 # PyInstaller entry points
+├── tests/                     # unit, integration, fixtures
+├── docs/REFACTOR_PLAN.md      # findings, target architecture, phase outcomes
+├── pharmparser.spec           # PyInstaller build definition
+└── config.json.example
 ```
 
-> The layout above is mid-refactor. See [`docs/REFACTOR_PLAN.md`](docs/REFACTOR_PLAN.md)
-> for the target architecture and the phased plan to get there.
+Four ideas carry the design:
+
+1. **Grids, not worksheets.** A sheet's content and layout are built as data by pure
+   functions, so the report is testable without Excel. `xlsx_writer` is the only module
+   that touches openpyxl.
+2. **VBA is an optional post-step.** openpyxl always writes a valid `.xlsx`; the macro
+   buttons are injected afterwards by driving Excel over COM. `pythoncom` and `win32com`
+   are imported lazily, so the package stays importable — and testable — everywhere.
+3. **A controller between the front ends and the use cases.** Both the GUI and the CLI
+   drive the same `Controller`, so they cannot drift apart, and it runs headless.
+4. **Validated config.** Explicit models with actionable errors, atomic saves, and the
+   on-disk format preserved exactly, so existing `config.json` files keep working.
+
+See [`docs/REFACTOR_PLAN.md`](docs/REFACTOR_PLAN.md) for the findings behind all of this
+and what each phase changed.
 
 ---
 
 ## Development
 
+See [CONTRIBUTING.md](CONTRIBUTING.md). The short version:
+
 ```bash
 uv sync --all-groups     # runtime + dev + build dependencies
-uv run pytest            # tests
 uv run ruff check .      # lint
 uv run mypy              # type check
+uv run pytest            # tests
 uv run pre-commit install
 ```
 
-The package installs and the test suite runs on Linux and macOS as well as Windows;
-only the Excel/COM macro-injection step is Windows-specific.
+The GUI smoke tests need a display and skip without one. On a headless machine:
 
-Tests marked `xfail(strict=True)` pin known bugs that are documented in the refactor
-plan and fixed in a later phase — if one starts passing unexpectedly, the suite fails,
-so the fix cannot land silently.
+```bash
+xvfb-run -a uv run pytest
+```
+
+### Building a binary
+
+```bash
+uv run pyinstaller pharmparser.spec
+```
+
+Produces `dist/pharmparser` (GUI, no console) and `dist/pharmparser-cli` (headless), both
+single-file. PyInstaller 6.15 is the floor: earlier releases cap out at Python 3.13 and
+their bootloader aborts with *Failed to allocate PyConfig structure* on a 3.14 build.
 
 ---
 

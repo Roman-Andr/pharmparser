@@ -9,6 +9,7 @@ from pharmparser.config import ExportSettings
 from pharmparser.domain import Pharmacy, PriceTable
 from pharmparser.export.vba import injector
 
+from .endpoint import FakeEndpoint, running_endpoint
 from .fakes import FakeExcel
 
 
@@ -73,3 +74,9 @@ def excel_sessions(monkeypatch: pytest.MonkeyPatch) -> list[FakeExcel]:
 
     monkeypatch.setattr(injector, "excel_application", fake_application)
     return sessions
+
+
+@pytest.fixture
+def endpoint() -> Iterator[FakeEndpoint]:
+    """A real HTTP price endpoint on localhost. See tests/endpoint.py."""
+    yield from running_endpoint()

@@ -6,18 +6,18 @@ readme = "README.md"
 requires-python = ">=3.14"
 license = { text = "MIT" }
 dependencies = [
-    "aiohttp>=3.12.14",
-    "beautifulsoup4>=4.13.4",
+    "aiohttp>=3.14",
+    "beautifulsoup4>=4.15",
     "ctkmessagebox>=2.7",
-    "customtkinter>=5.2.2",
-    "lxml>=6.0.1",
+    "customtkinter>=6.0",
+    # lxml 6.0.1 was the first release shipping cp314 wheels.
+    "lxml>=6.1.1",
     "openpyxl>=3.1.5",
-    "psutil>=7.0.0",
+    "pydantic>=2.13",
+    "pydantic-settings>=2.15",
     # Excel macro injection (.xlsm buttons) is Windows-only; the rest of the
     # package must stay installable and testable everywhere.
-    "pydantic>=2.10",
-    "pydantic-settings>=2.7",
-    "pywin32>=311; sys_platform == 'win32'",
+    "pywin32>=312; sys_platform == 'win32'",
 ]
 
 [project.scripts]
@@ -26,16 +26,21 @@ pharmparser-cli = "pharmparser.cli:main"
 
 [dependency-groups]
 dev = [
-    "aioresponses>=0.7",
-    "mypy>=1.14",
-    "pre-commit>=4.0",
-    "pytest>=8.3",
-    "pytest-asyncio>=0.25",
-    "pytest-cov>=6.0",
-    "ruff>=0.9",
+    # The network is faked with a real localhost server (tests/endpoint.py) rather
+    # than aioresponses, which patches aiohttp's internals and has no release
+    # working with aiohttp 3.14.
+    "mypy>=1.18",
+    "pre-commit>=4.3",
+    "pytest>=9.0",
+    "pytest-asyncio>=1.2",
+    "pytest-cov>=7.0",
+    "ruff>=0.14",
 ]
 build = [
-    "pyinstaller>=6.14.2",
+    # 6.15 is the first release supporting Python 3.14; 6.14 declares
+    # `requires-python <3.14` and its bootloader aborts with
+    # "Failed to allocate PyConfig structure" on a 3.14 build.
+    "pyinstaller>=6.15",
     "pyinstaller-hooks-contrib>=2025.6",
 ]
 

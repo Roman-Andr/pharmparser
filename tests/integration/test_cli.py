@@ -1,20 +1,16 @@
-"""End-to-end run of the CLI against a faked tabletka.by."""
+"""End-to-end run of the CLI against a real price endpoint on localhost."""
 
 import json
 from pathlib import Path
 
 import pytest
-from aioresponses import aioresponses
 from openpyxl import load_workbook
 
 from pharmparser.cli import main
 from pharmparser.platform_ import supports_excel_macros
 
+from ..endpoint import FakeEndpoint
 from ..pages import page, row
-
-URL = "https://tabletka.by/ajax-request/reload-pharmacy-price"
-ENDPOINT = URL + "/"
-"""What the client actually posts to: tabletka.by 500s without the trailing slash (B17)."""
 
 
 def PAGE(price: str) -> str:
@@ -22,7 +18,7 @@ def PAGE(price: str) -> str:
 
 
 @pytest.fixture
-def config_file(tmp_path: Path) -> Path:
+def config_file(tmp_path: Path, endpoint: FakeEndpoint) -> Path:
     path = tmp_path / "config.json"
     path.write_text(
         json.dumps(
@@ -36,7 +32,7 @@ def config_file(tmp_path: Path) -> Path:
                 },
                 "settings": {"fileName": "out.xlsx", "title": "Тест"},
                 "request": {
-                    "url": URL,
+                    "url": endpoint.url,
                     "headers": {"Cookie": "PHPSESSID=abc; lim-result=5000"},
                     "data": {"_csrf": "token"},
                 },
@@ -48,28 +44,26 @@ def config_file(tmp_path: Path) -> Path:
     return path
 
 
-def stub_two_pharmacies(mocked: aioresponses) -> None:
-    for price in ("5,00", "6,50"):
-        mocked.post(ENDPOINT, payload={"priceCount": 1, "data": ""})
-        mocked.post(ENDPOINT, payload={"priceCount": 1, "data": PAGE(price)})
+@pytest.fixture
+def two_pharmacies(endpoint: FakeEndpoint) -> FakeEndpoint:
+    """Аптека 1 at 5.00, Аптека 2 at 6.50 — a 1.50 difference."""
+    endpoint.serve("111", PAGE("5,00"))
+    endpoint.serve("222", PAGE("6,50"))
+    return endpoint
 
 
-def test_cli_writes_a_workbook(config_file: Path, tmp_path: Path) -> None:
+def test_cli_writes_a_workbook(config_file: Path, tmp_path: Path, two_pharmacies: FakeEndpoint) -> None:
     output = tmp_path / "report.xlsx"
-    with aioresponses() as mocked:
-        stub_two_pharmacies(mocked)
-        assert main(["--config", str(config_file), "--output", str(output)]) == 0
+    assert main(["--config", str(config_file), "--output", str(output)]) == 0
 
     sheet = load_workbook(output)["Данные"]
     assert [cell.value for cell in sheet[3]] == ["Название", "Аптека 1", "Аптека 2", "Разница"]
     assert [cell.value for cell in sheet[4]] == ["Аспирин, 100мг", 5.0, 6.5, 1.5]
 
 
-def test_cli_defaults_to_the_first_profile(config_file: Path, tmp_path: Path) -> None:
+def test_cli_defaults_to_the_first_profile(config_file: Path, tmp_path: Path, two_pharmacies: FakeEndpoint) -> None:
     output = tmp_path / "report.xlsx"
-    with aioresponses() as mocked:
-        stub_two_pharmacies(mocked)
-        assert main(["--config", str(config_file), "--output", str(output)]) == 0
+    assert main(["--config", str(config_file), "--output", str(output)]) == 0
     assert output.exists()
 
 
@@ -89,61 +83,53 @@ def test_cli_reports_a_missing_config(tmp_path: Path, capsys: pytest.CaptureFixt
     assert "not found" in capsys.readouterr().err
 
 
-def test_cli_reports_a_scrape_failure(config_file: Path, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+def test_cli_reports_a_scrape_failure(
+    config_file: Path, tmp_path: Path, endpoint: FakeEndpoint, capsys: pytest.CaptureFixture
+) -> None:
     """B6: scrape failures reach the user instead of vanishing."""
-    with aioresponses() as mocked:
-        for _ in range(6):
-            mocked.post(ENDPOINT, status=500)
-        assert main(["--config", str(config_file), "--output", str(tmp_path / "x.xlsx")]) == 1
+    endpoint.fail(500)
+    assert main(["--config", str(config_file), "--output", str(tmp_path / "x.xlsx")]) == 1
     assert "could not be parsed" in capsys.readouterr().err
 
 
 def test_env_cookie_reaches_the_request(
-    config_file: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    config_file: Path, tmp_path: Path, two_pharmacies: FakeEndpoint, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("PHARMPARSER_COOKIE", "PHPSESSID=from-env; lim-result=5000")
-    with aioresponses() as mocked:
-        stub_two_pharmacies(mocked)
-        assert main(["--config", str(config_file), "--output", str(tmp_path / "r.xlsx")]) == 0
-        sent = mocked.requests[("POST", __import__("aiohttp").helpers.URL(ENDPOINT))][0]
-    assert "from-env" in sent.kwargs["headers"]["Cookie"]
+    assert main(["--config", str(config_file), "--output", str(tmp_path / "r.xlsx")]) == 0
+    assert all("from-env" in request.cookie for request in two_pharmacies.requests)
 
 
 @pytest.mark.skipif(supports_excel_macros(), reason="Excel is available, so macros are not skipped")
 def test_macros_flag_degrades_gracefully_off_windows(
-    config_file: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    config_file: Path, tmp_path: Path, two_pharmacies: FakeEndpoint, caplog: pytest.LogCaptureFixture
 ) -> None:
     output = tmp_path / "report.xlsx"
-    with aioresponses() as mocked, caplog.at_level("WARNING"):
-        stub_two_pharmacies(mocked)
+    with caplog.at_level("WARNING"):
         assert main(["--config", str(config_file), "--output", str(output), "--macros"]) == 0
     assert output.exists()
     assert "Windows only" in caplog.text
 
 
-def test_cache_flag_reuses_a_cached_run(config_file: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cache_flag_reuses_a_cached_run(
+    config_file: Path, tmp_path: Path, two_pharmacies: FakeEndpoint, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """--cache makes the second run answer from disk without touching the network."""
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.chdir(tmp_path)  # caches land beside the config, not in the repo
     first = tmp_path / "first.xlsx"
     second = tmp_path / "second.xlsx"
 
-    with aioresponses() as mocked:
-        stub_two_pharmacies(mocked)
-        assert main(["--config", str(config_file), "--output", str(first), "--cache"]) == 0
+    assert main(["--config", str(config_file), "--output", str(first), "--cache"]) == 0
+    requests_so_far = len(two_pharmacies.requests)
 
-    # No stubs registered: any request at all would fail.
-    with aioresponses():
-        assert main(["--config", str(config_file), "--output", str(second), "--cache"]) == 0
-
+    assert main(["--config", str(config_file), "--output", str(second), "--cache"]) == 0
+    assert len(two_pharmacies.requests) == requests_so_far, "the second run went to the network"
     assert load_workbook(second).sheetnames == load_workbook(first).sheetnames
 
 
 def test_without_the_cache_flag_nothing_is_written_to_the_cache(
-    config_file: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    config_file: Path, tmp_path: Path, two_pharmacies: FakeEndpoint, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    cache_home = tmp_path / "cache"
-    monkeypatch.setenv("XDG_CACHE_HOME", str(cache_home))
-    with aioresponses() as mocked:
-        stub_two_pharmacies(mocked)
-        assert main(["--config", str(config_file), "--output", str(tmp_path / "r.xlsx")]) == 0
-    assert not list(cache_home.rglob("*.json"))
+    monkeypatch.chdir(tmp_path)
+    assert main(["--config", str(config_file), "--output", str(tmp_path / "r.xlsx")]) == 0
+    assert not list(tmp_path.glob(".cache-*.json"))

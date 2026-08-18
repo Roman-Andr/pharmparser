@@ -14,9 +14,7 @@ import asyncio
 import json
 from pathlib import Path
 
-import aiohttp
 import pytest
-from aioresponses import aioresponses
 from openpyxl import load_workbook
 
 from pharmparser.cli import main
@@ -24,13 +22,11 @@ from pharmparser.config import load_config, save_config
 from pharmparser.export import export_with_macros
 from pharmparser.scraping import scrape_profile
 
+from ..endpoint import FakeEndpoint
 from ..pages import page as build_page
 from ..pages import row
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "real_world_config.json"
-URL = "https://tabletka.by/ajax-request/reload-pharmacy-price"
-ENDPOINT = URL + "/"
-"""What the client actually posts to: tabletka.by 500s without the trailing slash (B17)."""
 
 
 def page(price: str) -> str:
@@ -41,16 +37,22 @@ def page(price: str) -> str:
 
 
 @pytest.fixture
-def config_file(tmp_path: Path) -> Path:
+def config_file(tmp_path: Path, endpoint: FakeEndpoint) -> Path:
+    """The real configuration, pointed at the local endpoint instead of tabletka.by."""
     path = tmp_path / "config.json"
-    path.write_text(FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
+    raw = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    raw["request"]["url"] = endpoint.url
+    path.write_text(json.dumps(raw, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path
 
 
-def stub(mocked: aioresponses, pharmacies: int) -> None:
-    for i in range(pharmacies):
-        mocked.post(ENDPOINT, payload={"priceCount": 2, "data": ""})
-        mocked.post(ENDPOINT, payload={"priceCount": 2, "data": page(f"{5 + i},00")})
+@pytest.fixture
+def served(endpoint: FakeEndpoint, config_file: Path) -> FakeEndpoint:
+    """A distinct price per pharmacy, so misalignment would show up in the report."""
+    ids = sorted({entry.pharmacy_id for profile in load_config(config_file).profiles for entry in profile.pharmacies})
+    for i, pharmacy_id in enumerate(ids):
+        endpoint.serve(pharmacy_id, page(f"{5 + i},00"), price_count=2)
+    return endpoint
 
 
 # -- loading -------------------------------------------------------------------
@@ -83,40 +85,41 @@ def test_a_pharmacy_id_may_repeat_across_profiles(config_file: Path) -> None:
     assert "381" in [e.pharmacy_id for e in profiles["Profile 6"].pharmacies]
 
 
-def test_round_trip_is_byte_for_byte_identical(config_file: Path, tmp_path: Path) -> None:
-    """Saving must not reorder, rename or drop anything (A6)."""
+def test_round_trip_is_byte_for_byte_identical(tmp_path: Path) -> None:
+    """Saving must not reorder, rename or drop anything (A6).
+
+    Read straight from the fixture rather than the rewritten copy, so the URL the
+    real file carries — no trailing slash — is part of what must survive (B17).
+    """
+    original = tmp_path / "original.json"
+    original.write_text(FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
     out = tmp_path / "saved.json"
-    save_config(load_config(config_file), out)
+    save_config(load_config(original), out)
     assert json.loads(out.read_text(encoding="utf-8")) == json.loads(
-        config_file.read_text(encoding="utf-8")
+        FIXTURE.read_text(encoding="utf-8")
     )
 
 
 # -- scraping ------------------------------------------------------------------
 
 
-def test_browser_headers_survive_to_the_request(config_file: Path, tmp_path: Path) -> None:
+def test_browser_headers_survive_to_the_request(config_file: Path, tmp_path: Path, served: FakeEndpoint) -> None:
     """An explicit Content-Type alongside form-encoded data must not be rejected."""
-    with aioresponses() as mocked:
-        stub(mocked, 9)
-        assert main(["--config", str(config_file), "--output", str(tmp_path / "r.xlsx")]) == 0
-        sent = mocked.requests[("POST", aiohttp.helpers.URL(ENDPOINT))][0]
+    assert main(["--config", str(config_file), "--output", str(tmp_path / "r.xlsx")]) == 0
 
-    headers = sent.kwargs["headers"]
-    assert headers["Content-Type"] == "application/x-www-form-urlencoded; charset=UTF-8"
-    assert headers["host"] == "tabletka.by"
-    assert "lim-result=10" in headers["Cookie"]
-    assert sent.kwargs["data"]["id"] == "3563"
+    sent = served.requests[0]
+    assert sent.headers["Content-Type"] == "application/x-www-form-urlencoded; charset=UTF-8"
+    assert sent.headers["host"] == "tabletka.by"
+    assert "lim-result=10" in sent.cookie
+    assert {request.pharmacy_id for request in served.requests} >= {"3563"}
 
 
 # -- exporting -----------------------------------------------------------------
 
 
-def test_nine_pharmacy_profile_exports(config_file: Path, tmp_path: Path) -> None:
+def test_nine_pharmacy_profile_exports(config_file: Path, tmp_path: Path, served: FakeEndpoint) -> None:
     output = tmp_path / "report.xlsx"
-    with aioresponses() as mocked:
-        stub(mocked, 9)
-        assert main(["--config", str(config_file), "--output", str(output)]) == 0
+    assert main(["--config", str(config_file), "--output", str(output)]) == 0
 
     sheet = load_workbook(output)["Данные"]
     assert sheet.max_column == 2 + 2 * 8
@@ -131,35 +134,33 @@ def test_nine_pharmacy_profile_exports(config_file: Path, tmp_path: Path) -> Non
     assert sheet.column_dimensions["D"].width == 9
 
 
-def test_every_profile_can_be_selected(config_file: Path, tmp_path: Path) -> None:
+def test_every_profile_can_be_selected(config_file: Path, tmp_path: Path, served: FakeEndpoint) -> None:
     counts = {"Profile 1": 9, "Profile 2": 5, "Profile 3": 3, "Profile 4": 3, "Profile 5": 3, "Profile 6": 8}
     for name, pharmacies in counts.items():
         output = tmp_path / f"{name}.xlsx"
-        with aioresponses() as mocked:
-            stub(mocked, pharmacies)
-            assert main(["--config", str(config_file), "--profile", name, "--output", str(output)]) == 0
+        assert main(["--config", str(config_file), "--profile", name, "--output", str(output)]) == 0
         assert load_workbook(output)["Данные"].max_column == 2 + 2 * (pharmacies - 1)
 
 
-def test_the_whole_browser_cookie_survives_to_the_request(config_file: Path, tmp_path: Path) -> None:
+def test_the_whole_browser_cookie_survives_to_the_request(
+    config_file: Path, tmp_path: Path, served: FakeEndpoint
+) -> None:
     """Only ``lim-result`` is rewritten; the other fifteen cookies travel untouched."""
-    with aioresponses() as mocked:
-        stub(mocked, 9)
-        assert main(["--config", str(config_file), "--output", str(tmp_path / "r.xlsx")]) == 0
-        sent = mocked.requests[("POST", aiohttp.helpers.URL(ENDPOINT))][0]
+    assert main(["--config", str(config_file), "--output", str(tmp_path / "r.xlsx")]) == 0
 
     configured = load_config(config_file).request.cookie
-    keys = [cookie.split("=", 1)[0].strip() for cookie in sent.kwargs["headers"]["Cookie"].split(";")]
+    sent = served.requests[0].cookie
+    keys = [cookie.split("=", 1)[0].strip() for cookie in sent.split(";")]
     assert keys == [cookie.split("=", 1)[0].strip() for cookie in configured.split(";")]
-    assert "region=%D0%93%D0%BE%D0%BC%D0%B5%D0%BB%D1%8C" in sent.kwargs["headers"]["Cookie"]
+    assert "region=%D0%93%D0%BE%D0%BC%D0%B5%D0%BB%D1%8C" in sent
 
 
-def test_the_configured_title_names_the_analysis_sheet(config_file: Path, tmp_path: Path) -> None:
+def test_the_configured_title_names_the_analysis_sheet(
+    config_file: Path, tmp_path: Path, served: FakeEndpoint
+) -> None:
     """B15, against the real value: this config sets ``title`` to "Анализ"."""
     output = tmp_path / "report.xlsx"
-    with aioresponses() as mocked:
-        stub(mocked, 9)
-        assert main(["--config", str(config_file), "--profile", "Profile 1", "--output", str(output)]) == 0
+    assert main(["--config", str(config_file), "--profile", "Profile 1", "--output", str(output)]) == 0
 
     workbook = load_workbook(output)
     assert load_config(config_file).settings.title == "Анализ"
@@ -168,13 +169,11 @@ def test_the_configured_title_names_the_analysis_sheet(config_file: Path, tmp_pa
 
 
 def test_the_macro_export_runs_over_the_real_profile(
-    config_file: Path, tmp_path: Path, excel_sessions: list
+    config_file: Path, tmp_path: Path, served: FakeEndpoint, excel_sessions: list
 ) -> None:
     """The nine-pharmacy profile through the .xlsm path: one Excel, one output file."""
     config = load_config(config_file)
-    with aioresponses() as mocked:
-        stub(mocked, 9)
-        table = asyncio.run(scrape_profile(config.request, config.profiles[0].pharmacies))
+    table = asyncio.run(scrape_profile(config.request, config.profiles[0].pharmacies))
 
     target = export_with_macros(config.settings, table, tmp_path / "data.xlsm")
 

@@ -441,11 +441,51 @@ pass.
 **A8.** `__slots__` is gone from `Entry` and `Profile`. The `pharmparser.ui.*` mypy
 exemption is gone with it, and `check_untyped_defs` is now on for the whole project.
 
-### Phase 6 — Docs and release
+### Phase 6 — Docs and release — **done**
 - README: architecture, the VBA-trust prerequisite (**P8**), cross-platform behaviour, contributor
   setup. `CONTRIBUTING.md`. Narrow the `*.json` ignore rule and document credential handling (**P9**).
 - Structured logging with a rotating file handler.
 - Verify the PyInstaller build still produces a working Windows binary.
+
+**Outcome.** The README now documents the architecture and the reasoning behind it, what each
+sheet of the workbook contains, the VBA-trust prerequisite (P8), the environment-variable
+credential overrides, and the narrowed ignore rules (P9). `CONTRIBUTING.md` states the layering
+rule as a table of "if you are changing X, the layer is Y and it must not import Z", plus the
+testing conventions.
+
+`logging_.py` configures a console handler and a rotating file handler
+(`pharmparser.log`, 1 MB × 3) for both entry points. The packaged GUI has no console, so the
+file is the only record of a failed run; a filter keeps third-party DEBUG chatter out of it
+while letting anyone's warnings through.
+
+**Packaging was broken and is fixed.** `pharmparser.spec` is now checked in (the blanket
+`*.spec` ignore rule hid it), and building revealed two faults. PyInstaller 6.14 declares
+`requires-python <3.14` and its bootloader aborts with *Failed to allocate PyConfig structure*
+on a 3.14 build — the floor is now 6.15. And PyInstaller runs its entry script as `__main__`,
+which breaks every relative import in the package, so the entry points moved to `packaging/`.
+The spec builds two binaries: the GUI, and a headless `pharmparser-cli` that needs no Tk and is
+therefore runnable wherever it is built. Verified by running the packaged binary end to end
+against a local endpoint: a real workbook, and the log file beside it.
+
+**CI grew two things:** the Linux job runs under `xvfb-run`, so the GUI smoke tests actually
+execute, and a `package` job builds on Linux and Windows and runs the headless binary.
+
+### Dependency refresh (2026-08-18)
+
+Everything was moved to its latest release, which surfaced three problems worth recording:
+
+- **`aioresponses` is dead against aiohttp 3.14.** It fakes the network by reaching into
+  aiohttp's internals, and `ClientResponse.__init__` gained a required `stream_writer`
+  argument; 0.7.9 is the latest release and there is no fix. Rather than pinning a runtime
+  dependency back for a test double, the tests now run a real HTTP server on localhost
+  (`tests/endpoint.py`). It answers from the request's own fields rather than a queue, so the
+  fan-out's concurrency cannot make a test flaky, and the client is exercised over real
+  sockets, status codes and headers.
+- **customtkinter went 5.2 → 6.0.** Nothing in the suite would have noticed if the widgets had
+  changed, so `tests/integration/test_gui.py` now builds the real window under `xvfb`, runs
+  every button callback, opens the error dialog and checks the save-on-close path. It passes on
+  6.0.0.
+- **`psutil` was still a dependency** although B11 deleted the only calls to it. Dropped.
 
 ---
 

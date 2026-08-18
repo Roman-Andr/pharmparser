@@ -1,13 +1,15 @@
-"""Tests for the HTTP client, with the network faked out."""
+"""Tests for the HTTP client, against a real endpoint on localhost."""
+
+from __future__ import annotations
 
 import aiohttp
 import pytest
-from aioresponses import aioresponses
 from pydantic import HttpUrl
 
 from pharmparser.config import PharmacyEntry, RequestConfig
 from pharmparser.scraping import PricePage, ScrapeError, TabletkaClient
 
+from ..endpoint import FakeEndpoint
 from ..pages import simple_page
 
 URL = "https://tabletka.by/ajax-request/reload-pharmacy-price"
@@ -15,12 +17,13 @@ ENDPOINT = URL + "/"
 """What the client actually posts to: tabletka.by 500s without the trailing slash (B17)."""
 
 PAGE_HTML = simple_page("от 5,00 р.")
+EXPECTED = {"Аспирин, таблетки 100мг": 5.00, "Цитрамон, таблетки N10": 5.00}
 
 
 @pytest.fixture
-def request_config() -> RequestConfig:
+def request_config(endpoint: FakeEndpoint) -> RequestConfig:
     return RequestConfig(
-        url=HttpUrl(URL),
+        url=HttpUrl(endpoint.url),
         headers={"Cookie": "PHPSESSID=abc; lim-result=5000"},
         data={"sort": "name", "_csrf": "token"},
     )
@@ -31,7 +34,9 @@ def entry() -> PharmacyEntry:
     return PharmacyEntry(name="Аптека 1", url="https://tabletka.by/pharmacies/111")
 
 
-async def make_client(request_config: RequestConfig, **kwargs) -> tuple[TabletkaClient, aiohttp.ClientSession]:
+async def make_client(
+    request_config: RequestConfig, **kwargs
+) -> tuple[TabletkaClient, aiohttp.ClientSession]:
     session = aiohttp.ClientSession()
     return TabletkaClient(request_config, session, backoff=0, **kwargs), session
 
@@ -53,102 +58,115 @@ def test_price_page_tolerates_extra_and_missing_keys() -> None:
 # -- fetching ------------------------------------------------------------------
 
 
-async def test_fetches_and_parses_a_single_page(request_config: RequestConfig, entry: PharmacyEntry) -> None:
+async def test_fetches_and_parses_a_single_page(
+    request_config: RequestConfig, entry: PharmacyEntry, endpoint: FakeEndpoint
+) -> None:
+    endpoint.serve("111", PAGE_HTML, price_count=2)
     client, session = await make_client(request_config)
     try:
-        with aioresponses() as mocked:
-            mocked.post(ENDPOINT, payload={"priceCount": 1, "data": ""})
-            mocked.post(ENDPOINT, payload={"priceCount": 1, "data": PAGE_HTML})
-            assert await client.prices_for(entry) == {
-                "Аспирин, таблетки 100мг": 5.00,
-                "Цитрамон, таблетки N10": 5.00,
-            }
+        assert await client.prices_for(entry) == EXPECTED
     finally:
         await session.close()
 
 
-async def test_paginates_over_the_reported_count(request_config: RequestConfig, entry: PharmacyEntry) -> None:
+async def test_paginates_over_the_reported_count(
+    request_config: RequestConfig, entry: PharmacyEntry, endpoint: FakeEndpoint
+) -> None:
+    endpoint.serve("111", PAGE_HTML, price_count=12000)  # 12000 prices at 5000 per page
     client, session = await make_client(request_config)
     try:
-        with aioresponses() as mocked:
-            mocked.post(ENDPOINT, payload={"priceCount": 12000, "data": ""})  # count probe
-            for _ in range(3):  # 12000 prices at 5000 per page
-                mocked.post(ENDPOINT, payload={"priceCount": 12000, "data": PAGE_HTML})
-            await client.prices_for(entry)
-            assert len(mocked.requests[("POST", aiohttp.helpers.URL(ENDPOINT))]) == 4
+        await client.prices_for(entry)
     finally:
         await session.close()
+    assert [request.page for request in endpoint.requests] == ["0", "1", "2", "3"]
 
 
-async def test_uses_the_configured_url(entry: PharmacyEntry) -> None:
-    """B13: the configured URL used to be ignored in favour of a hardcoded host and path."""
-    other = "https://example.test/prices"
-    config = RequestConfig(url=HttpUrl(other), headers={"Cookie": "x=1"}, data={})
+async def test_uses_the_configured_url(entry: PharmacyEntry, endpoint: FakeEndpoint) -> None:
+    """B13: the configured URL used to be ignored for a hardcoded host and path.
+
+    Nothing else is listening on this port, so a request that went anywhere else
+    would simply not arrive.
+    """
+    config = RequestConfig(url=HttpUrl(endpoint.url), headers={"Cookie": "x=1"}, data={})
+    endpoint.serve_all("", price_count=0)
     client, session = await make_client(config)
     try:
-        with aioresponses() as mocked:
-            mocked.post(other + "/", payload={"priceCount": 0, "data": ""})
-            mocked.post(other + "/", payload={"priceCount": 0, "data": ""})
-            await client.prices_for(entry)
-            assert ("POST", aiohttp.helpers.URL(other + "/")) in mocked.requests
+        await client.prices_for(entry)
     finally:
         await session.close()
+    assert endpoint.requests
+    assert all(request.path == "/ajax-request/reload-pharmacy-price/" for request in endpoint.requests)
 
 
-async def test_retries_then_succeeds(request_config: RequestConfig, entry: PharmacyEntry) -> None:
+async def test_retries_then_succeeds(
+    request_config: RequestConfig, entry: PharmacyEntry, endpoint: FakeEndpoint
+) -> None:
+    endpoint.serve("111", PAGE_HTML, price_count=2)
+    endpoint.fail_next(503)
     client, session = await make_client(request_config)
     try:
-        with aioresponses() as mocked:
-            mocked.post(ENDPOINT, status=503)
-            mocked.post(ENDPOINT, payload={"priceCount": 1, "data": ""})
-            mocked.post(ENDPOINT, payload={"priceCount": 1, "data": PAGE_HTML})
-            assert await client.prices_for(entry) == {
-                "Аспирин, таблетки 100мг": 5.00,
-                "Цитрамон, таблетки N10": 5.00,
-            }
+        assert await client.prices_for(entry) == EXPECTED
     finally:
         await session.close()
+    assert len(endpoint.requests) == 3  # the failure, then the probe and the page
 
 
-async def test_gives_up_after_the_retry_budget(request_config: RequestConfig, entry: PharmacyEntry) -> None:
+async def test_gives_up_after_the_retry_budget(
+    request_config: RequestConfig, entry: PharmacyEntry, endpoint: FakeEndpoint
+) -> None:
+    endpoint.fail(500)
     client, session = await make_client(request_config, retries=2)
     try:
-        with aioresponses() as mocked:
-            mocked.post(ENDPOINT, status=500)
-            mocked.post(ENDPOINT, status=500)
-            with pytest.raises(ScrapeError, match="after 2 attempts"):
-                await client.prices_for(entry)
+        with pytest.raises(ScrapeError, match="after 2 attempts"):
+            await client.prices_for(entry)
     finally:
         await session.close()
+    assert len(endpoint.requests) == 2
 
 
-async def test_reports_the_pharmacy_in_the_error(request_config: RequestConfig, entry: PharmacyEntry) -> None:
+async def test_reports_the_pharmacy_in_the_error(
+    request_config: RequestConfig, entry: PharmacyEntry, endpoint: FakeEndpoint
+) -> None:
     """B6: failures used to vanish — the errors list was never populated."""
+    endpoint.fail(500)
     client, session = await make_client(request_config, retries=1)
     try:
-        with aioresponses() as mocked:
-            mocked.post(ENDPOINT, status=500)
-            with pytest.raises(ScrapeError, match="pharmacy 111"):
-                await client.prices_for(entry)
+        with pytest.raises(ScrapeError, match="pharmacy 111"):
+            await client.prices_for(entry)
     finally:
         await session.close()
 
 
 async def test_page_size_is_narrowed_for_the_count_probe(
-    request_config: RequestConfig, entry: PharmacyEntry
+    request_config: RequestConfig, entry: PharmacyEntry, endpoint: FakeEndpoint
 ) -> None:
     """The first call only needs the total, so it asks for 10 rows rather than 5000."""
+    endpoint.serve_all("", price_count=0)
     client, session = await make_client(request_config)
     try:
-        with aioresponses() as mocked:
-            mocked.post(ENDPOINT, payload={"priceCount": 0, "data": ""})
-            mocked.post(ENDPOINT, payload={"priceCount": 0, "data": ""})
-            await client.prices_for(entry)
-            probe, full = mocked.requests[("POST", aiohttp.helpers.URL(ENDPOINT))]
-            assert "lim-result=10" in probe.kwargs["headers"]["Cookie"]
-            assert "lim-result=5000" in full.kwargs["headers"]["Cookie"]
+        await client.prices_for(entry)
     finally:
         await session.close()
+    probe, full = endpoint.requests
+    assert "lim-result=10" in probe.cookie
+    assert "lim-result=5000" in full.cookie
+
+
+async def test_the_configured_form_fields_are_sent(
+    request_config: RequestConfig, entry: PharmacyEntry, endpoint: FakeEndpoint
+) -> None:
+    endpoint.serve_all("", price_count=0)
+    client, session = await make_client(request_config)
+    try:
+        await client.prices_for(entry)
+    finally:
+        await session.close()
+    assert endpoint.requests[0].form["_csrf"] == "token"
+    assert endpoint.requests[0].form["sort"] == "name"
+    assert endpoint.requests[0].pharmacy_id == "111"
+
+
+# -- endpoint normalisation ----------------------------------------------------
 
 
 def test_the_endpoint_gains_the_trailing_slash_the_site_requires() -> None:

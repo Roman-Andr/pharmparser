@@ -14,6 +14,7 @@ from pathlib import Path
 from .config import ConfigError
 from .controller import Controller
 from .export import select_exporter
+from .logging_ import configure as configure_logging
 from .scraping import NoPharmaciesError, ScrapeError
 
 logger = logging.getLogger(__name__)
@@ -40,10 +41,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(levelname)s %(name)s: %(message)s",
-    )
+    log_file = configure_logging(verbose=args.verbose)
+    if log_file is not None:
+        logger.debug("Logging to %s", log_file)
 
     try:
         controller = Controller.load(args.config, exporter=select_exporter(macros=args.macros))

@@ -33,8 +33,9 @@ jobs:
       - name: Typecheck
         run: uv run mypy
 
+      # xvfb gives the GUI smoke tests a display; without one they skip.
       - name: Test
-        run: uv run pytest --cov --cov-report=term-missing
+        run: xvfb-run -a uv run pytest --cov --cov-report=term-missing
 
   # The .xlsm export drives Excel over COM, so it can only be exercised on Windows.
   # Everything else is expected to pass on Linux; this job guards the Windows-only
@@ -54,3 +55,36 @@ jobs:
 
       - name: Test
         run: uv run pytest
+
+  # The packaged binary has its own import graph — lazy imports and data files that
+  # PyInstaller cannot see by following `import` statements. Running the headless
+  # binary is the cheapest way to know it still starts.
+  package:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Build
+        run: uv run pyinstaller --noconfirm pharmparser.spec
+
+      - name: Smoke-test the headless binary
+        shell: bash
+        run: ./dist/pharmparser-cli --help
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pharmparser-${{ matrix.os }}
+          path: dist/
+          retention-days: 7
