@@ -6,7 +6,9 @@ window and run the callbacks? That question is worth asking automatically —
 customtkinter went 5.x to 6.0 during this project's life, and nothing else in the
 suite would have noticed if the widgets had changed under it.
 
-Skipped when there is no display. On a headless machine, run it under one:
+Skipped only where there is genuinely no display. Windows and macOS give Tk one
+without an X server; Linux needs `DISPLAY`, so on a headless machine run it under
+one:
 
     xvfb-run -a uv run pytest tests/integration/test_gui.py
 """
@@ -16,6 +18,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -24,8 +27,11 @@ import pytest
 
 from pharmparser.scraping import ScrapeError
 
+NEEDS_X11 = sys.platform not in ("win32", "darwin")
+HAS_DISPLAY = not NEEDS_X11 or bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+
 pytestmark = pytest.mark.skipif(
-    not os.environ.get("DISPLAY"), reason="no display; run under xvfb-run to exercise the GUI"
+    not HAS_DISPLAY, reason="no display; run under xvfb-run to exercise the GUI"
 )
 
 CONFIG = {
