@@ -310,3 +310,17 @@ for everything else.
 3. **Should the UI stay Russian-only?** Labels are currently hardcoded Russian string literals
    inside the formatters. If localisation is ever wanted, Phase 3 is the moment to route them
    through a message catalogue rather than retrofitting later.
+
+---
+
+## 6. Decisions taken (2026-08-18)
+
+1. **VBA buttons are essential — keep as-is.** The `.xlsm` + COM path stays first-class on
+   Windows. Consequence for the refactor: COM imports must become *lazy* rather than
+   module-scope, so that the package is importable — and therefore testable — on Linux even
+   though the macro step itself only runs on Windows. Cross-platform support is a test-suite
+   and CI concern, not a user-facing feature. Phase 3 keeps the VBA layer and fixes B1/B12
+   inside it instead of deleting it.
+2. **A headless CLI will be added.** `pharmparser.cli` becomes the end-to-end path exercised in
+   CI, and makes the scrape/export pipeline scriptable.
+3. **Execution starts at Phase 0.**
