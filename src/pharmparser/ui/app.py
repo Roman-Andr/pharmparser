@@ -8,6 +8,7 @@ from CTkMessagebox import CTkMessagebox
 from customtkinter import CTk, CTkButton, CTkCheckBox, CTkProgressBar
 
 from ..core import ParserEngine
+from ..domain import PriceTable, absolute_difference, percentage_difference
 from ..excel import AnalysisFormatter, DataFormatter, Spreadsheet
 from ..utils import Request, Settings
 from .profile import Profile
@@ -104,10 +105,11 @@ class App(CTk):
             titles, data = self.engine.process(entries)
             with open(cache_file, "w", encoding="utf-8") as file:
                 json.dump(data, file, ensure_ascii=False, indent=2)
+        table = PriceTable.from_mapping(titles, data)
         Spreadsheet(data, self.settings, [
-            (DataFormatter(self.settings, data, titles, lambda p1, p2: p2 - p1), "Данные"),
-            (DataFormatter(self.settings, data, titles, lambda p1, p2: (p2 - p1) / p1 * 100), "Проценты"),
-            (AnalysisFormatter(self.settings, data, titles), "Анализ")
+            (DataFormatter(self.settings, table, absolute_difference), "Данные"),
+            (DataFormatter(self.settings, table, percentage_difference), "Проценты"),
+            (AnalysisFormatter(self.settings, table), "Анализ")
         ]).export(data)
         done()
 

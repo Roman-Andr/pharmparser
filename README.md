@@ -109,6 +109,9 @@ uv run pharmparser
 pharmparser/
 ├── src/pharmparser/
 │   ├── __main__.py            # GUI entry point
+│   ├── domain/                # pure model + analysis (no I/O, no frameworks)
+│   │   ├── models.py          # Pharmacy, PriceTable
+│   │   └── analysis.py        # comparisons, market summary
 │   ├── core/
 │   │   └── parser_engine.py   # HTTP requests & HTML parsing logic
 │   ├── ui/
@@ -126,6 +129,8 @@ pharmparser/
 │   │   └── sort_order.py
 │   └── excel/                 # Excel formatting, macros and export
 ├── tests/
+│   ├── unit/
+│   └── integration/           # workbook round-trip, no Excel required
 ├── docs/REFACTOR_PLAN.md      # in-progress restructuring plan
 ├── config.json.example
 └── pyproject.toml

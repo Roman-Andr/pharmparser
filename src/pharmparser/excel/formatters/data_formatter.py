@@ -1,54 +1,82 @@
-import string
-from itertools import chain
-
 from openpyxl.formatting import Rule
 from openpyxl.styles import PatternFill
 from openpyxl.styles.differential import DifferentialStyle
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
-from ...utils import DataType, Settings
+from ...domain import DifferenceFn, PriceTable, comparison_rows
+from ...utils import Settings
 from .base_formatter import BaseFormatter
+
+HEADER_OFFSET = 2
+"""Blank spacer rows above the header, left free for the macro buttons."""
+
+NOT_STOCKED = "Нет"
+"""Displayed where a pharmacy does not stock an item.
+
+Only a rendering concern: the domain represents absence as ``None`` so it never
+travels inside otherwise-numeric data (B9).
+"""
+
+Cell = str | float | None
 
 
 class DataFormatter(BaseFormatter):
-    def __init__(self, settings: Settings, data: DataType, titles: list[str], formatting):
-        super().__init__(settings, data, titles)
-        self.formatting = formatting
+    __slots__ = ["difference"]
 
-    def format(self, ws: Worksheet):
-        offset = 2
-        codes = list(self.data.keys())
-        header: list[str | float] = ["Название", self.titles[0]]
-        for i, x in enumerate(self.titles):
-            if x != self.titles[-1]:
-                header += [self.titles[i + 1], "Разница"]
-        grid: list[list[str | float]] = [*([] for _ in range(offset)), header]
-        names = sorted(set(chain(*[list(self.data[x].keys()) for x in self.titles])), key=lambda k: k.lower())
-        for x in names:
-            prices = []
-            for y in self.titles:
-                price1, price2 = self.data[self.titles[0]].get(x, "Нет"), self.data[y].get(x, "Нет")
-                prices.append(price2)
-                if (price2 == "Нет" or price1 == "Нет") and y != codes[0]:
-                    prices.append(0)
-                elif y != self.titles[0]:
-                    prices.append(float(f"{float(f'{self.formatting(float(price1), float(price2)):.2f}'):+}"))
-            row = [x, *prices]
-            grid.append(row)
-        for x in string.ascii_uppercase:
-            ws.column_dimensions[x].width = self.settings.cellWidth
-        for x in string.ascii_uppercase[3::2]:
-            ws.column_dimensions[x].width = self.settings.diffWidth
-        ws.column_dimensions["A"].width = self.settings.colWidth
+    def __init__(self, settings: Settings, table: PriceTable, difference: DifferenceFn):
+        super().__init__(settings, table)
+        self.difference = difference
 
-        for x in string.ascii_uppercase[3::2]:
-            red_cell, green_cell = PatternFill(bgColor=self.settings.red), PatternFill(bgColor=self.settings.green)
-            dxf_red, dxf_green = DifferentialStyle(fill=red_cell), DifferentialStyle(fill=green_cell)
-            [ws.conditional_formatting.add(f"{x}{2 + offset}:{x}{len(grid)}", rule) for rule in
-             (Rule("cellIs", operator="lessThan", formula=["0"], dxf=dxf_red),
-              Rule("cellIs", operator="greaterThan", formula=["0"], dxf=dxf_green))]
+    @property
+    def _total_columns(self) -> int:
+        # "Название" + the reference price, then a price and a difference per competitor.
+        return 2 + 2 * len(self.table.competitors)
 
-        ws.auto_filter.ref = f"A{1 + offset}:{get_column_letter(len(grid[offset]))}{len(grid)}"
+    @property
+    def _difference_columns(self) -> list[int]:
+        return list(range(4, self._total_columns + 1, 2))
 
-        [ws.append(x) for x in grid]
+    def _header(self) -> list[Cell]:
+        header: list[Cell] = ["Название", self.table.reference.name]
+        for competitor in self.table.competitors:
+            header += [competitor.name, "Разница"]
+        return header
+
+    def _rows(self) -> list[list[Cell]]:
+        rows: list[list[Cell]] = []
+        for row in comparison_rows(self.table, self.difference):
+            cells: list[Cell] = [row.item, row.prices[0] if row.prices[0] is not None else NOT_STOCKED]
+            for price, difference in zip(row.prices[1:], row.differences, strict=True):
+                cells.append(price if price is not None else NOT_STOCKED)
+                # Left blank when undefined, so it stays distinguishable from a
+                # genuine difference of zero.
+                cells.append(difference)
+            rows.append(cells)
+        return rows
+
+    def _apply_conditional_formatting(self, ws: Worksheet, last_row: int) -> None:
+        dxf_red = DifferentialStyle(fill=PatternFill(bgColor=self.settings.red))
+        dxf_green = DifferentialStyle(fill=PatternFill(bgColor=self.settings.green))
+        for column in self._difference_columns:
+            letter = get_column_letter(column)
+            cells = f"{letter}{HEADER_OFFSET + 2}:{letter}{last_row}"
+            ws.conditional_formatting.add(cells, Rule("cellIs", operator="lessThan", formula=["0"], dxf=dxf_red))
+            ws.conditional_formatting.add(
+                cells, Rule("cellIs", operator="greaterThan", formula=["0"], dxf=dxf_green)
+            )
+
+    def format(self, ws: Worksheet) -> None:
+        grid: list[list[Cell]] = [*([] for _ in range(HEADER_OFFSET)), self._header(), *self._rows()]
+        last_row = len(grid)
+
+        widths = {1: self.settings.colWidth}
+        for column in self._difference_columns:
+            widths[column] = self.settings.diffWidth
+        self._set_column_widths(ws, widths, self.settings.cellWidth, self._total_columns)
+
+        self._apply_conditional_formatting(ws, last_row)
+        ws.auto_filter.ref = f"A{HEADER_OFFSET + 1}:{get_column_letter(self._total_columns)}{last_row}"
+
+        for row in grid:
+            ws.append(row)

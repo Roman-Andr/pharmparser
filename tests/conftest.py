@@ -2,6 +2,7 @@
 
 import pytest
 
+from pharmparser.domain import Pharmacy, PriceTable
 from pharmparser.utils import Settings
 
 
@@ -21,7 +22,7 @@ def settings() -> Settings:
 
 @pytest.fixture
 def price_table() -> dict[str, dict[str, float]]:
-    """A small three-pharmacy price table.
+    """A small three-pharmacy price table in the legacy name-keyed shape.
 
     ``Аптека 1`` is the reference pharmacy. The data deliberately covers the
     interesting cases: an item every pharmacy stocks, an item only the reference
@@ -32,3 +33,12 @@ def price_table() -> dict[str, dict[str, float]]:
         "Аптека 2": {"Аспирин, 100мг": 6.50, "Парацетамол, 500мг": 2.50},
         "Аптека 3": {"Аспирин, 100мг": 7.00, "Ибупрофен, 200мг": 4.00},
     }
+
+
+@pytest.fixture
+def table(price_table: dict[str, dict[str, float]]) -> PriceTable:
+    """The same data as a domain :class:`PriceTable`."""
+    return PriceTable.build(
+        (Pharmacy(id=str(i), name=name), prices)
+        for i, (name, prices) in enumerate(price_table.items(), start=1)
+    )

@@ -1,52 +1,33 @@
-import string
-from statistics import mean
-
 from openpyxl.worksheet.worksheet import Worksheet
 
-from ...utils import DataType, Settings
+from ...domain import summarise
 from .base_formatter import BaseFormatter
+
+Cell = str | float | None
+
+BREAKDOWN_COLUMNS = 5
 
 
 class AnalysisFormatter(BaseFormatter):
-    def __init__(self, settings: Settings, data: DataType, titles: list[str]):
-        super().__init__(settings, data, titles)
+    __slots__ = ()
 
-    def format(self, ws: Worksheet):
-        title = self.titles[0]
-        competitor_sizes = [len(self.data[name]) for name in self.titles if name != title]
-        competitor_mean = mean(competitor_sizes) if competitor_sizes else 0
-        ws.column_dimensions["A"].width = self.settings.colWidth
-        for x in string.ascii_uppercase[1::]:
-            ws.column_dimensions[x].width = self.settings.cellWidth
-        grid = [
-            [title],
-            ["Асортимент", len(self.data[title])],
-            ["Средний асортимент конкурентов", competitor_mean],
-            ["Позиций ниже всех", sum(
-                1 for item, price in self.data[title].items()
-                if all(price < self.data.get(competitor, {}).get(item, float('-inf'))
-                       for competitor in self.titles if competitor != title)
-            )],
-            ["Уникальных позиций", sum(
-                1 for item in self.data[title]
-                if all(item not in self.data.get(competitor, {})
-                       for competitor in self.titles if competitor != title)
-            )],
-            ["", "Асортимент", "Дороже", "Дешевле", "Уникальных"],
-            *[
-                [name,
-                 len(self.data.get(name, {})),
-                 sum(
-                     1 for item in self.data[title]
-                     if item in self.data.get(name, {}) and self.data[title][item] < self.data[name][item]),
-                 sum(
-                     1 for item in self.data[title]
-                     if item in self.data.get(name, {}) and self.data[title][item] > self.data[name][item]),
-                 sum(
-                     1 for item in self.data[name]
-                     if item not in self.data.get(title, {}))
-                 ]
-                for name in self.titles if name != title
-            ]
+    def format(self, ws: Worksheet) -> None:
+        summary = summarise(self.table)
+        self._set_column_widths(
+            ws, {1: self.settings.colWidth}, self.settings.cellWidth, BREAKDOWN_COLUMNS
+        )
+        breakdown: list[list[Cell]] = [
+            [stats.pharmacy.name, stats.assortment, stats.dearer, stats.cheaper, stats.unique]
+            for stats in summary.competitors
         ]
-        [ws.append(x) for x in grid]
+        grid: list[list[Cell]] = [
+            [summary.reference.name],
+            ["Асортимент", summary.assortment],
+            ["Средний асортимент конкурентов", summary.mean_competitor_assortment],
+            ["Позиций ниже всех", summary.cheapest_everywhere],
+            ["Уникальных позиций", summary.unique_items],
+            ["", "Асортимент", "Дороже", "Дешевле", "Уникальных"],
+            *breakdown,
+        ]
+        for row in grid:
+            ws.append(row)

@@ -249,7 +249,7 @@ Five design moves carry the refactor:
 Each phase ends with CI green and is independently mergeable. Phase 0 is a hard prerequisite
 for everything else.
 
-### Phase 0 — Make the project buildable and testable *(prerequisite)*
+### Phase 0 — Make the project buildable and testable *(prerequisite)* — **done**
 - Add `sys_platform == 'win32'` markers to `pywin32`; prune the ~13 transitive deps; move
   `pyinstaller` to a dev group. Drop `pandas`; replace the lone `numpy.mean` with `statistics.mean`.
 - Add `[build-system]`, `[project.scripts]`, a real `description`; relax `requires-python` to `>=3.12`.
@@ -257,12 +257,25 @@ for everything else.
 - Add a GitHub Actions workflow (lint → typecheck → test) and `pre-commit`.
 - **Exit criteria:** `uv sync` succeeds on Linux; `pytest` runs; CI is green.
 
-### Phase 1 — Extract the domain, fix the logic bugs
+### Phase 1 — Extract the domain, fix the logic bugs — **done**
 - Introduce `domain/models.py` and `domain/analysis.py`; lift every comparison and metric out of
   the formatters into pure functions.
 - Write failing tests first for **B2, B9, B10**, then fix.
 - Replace `DataType` with real types throughout.
 - **Exit criteria:** analysis metrics fully unit-tested, including the missing-item cases.
+
+**Outcome.** `domain/models.py` (`Pharmacy`, `PriceTable`) and `domain/analysis.py`
+(`comparison_rows`, `summarise`, and friends) are pure — no openpyxl, no Tk, no COM, no
+network — and carry every comparison rule that used to live inside worksheet loops. The
+formatters became thin renderers over them. B2, B9 and B10 are fixed and covered by
+regression tests; B14 is fixed in the domain (identity is `Pharmacy.id`, and the header is
+built by index) with the legacy name-keyed adapter now *refusing* duplicate names instead of
+silently dropping one — phase 2 removes the adapter by threading real ids through the scraper.
+
+**One visible output change.** Fixing B9 means a difference cell for an item a pharmacy does
+not stock is now left **blank** rather than written as `0`. A `0` was indistinguishable from
+two prices that genuinely match. The VBA `">0"` filter excludes blanks and zeroes alike, so
+filtering behaviour is unchanged; blanks sort last rather than among the zeroes.
 
 ### Phase 2 — Rewrite the scraping layer
 - Split `client` (HTTP) / `parser` (HTML→models) / `service` (fan-out) apart.
