@@ -81,13 +81,8 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 
 [[tool.mypy.overrides]]
-# Legacy modules still to be rewritten in phases 1-5 of docs/REFACTOR_PLAN.md.
-module = [
-    "pharmparser.core.*",
-    "pharmparser.excel.*",
-    "pharmparser.ui.*",
-    "pharmparser.utils.*",
-]
+# The last module still to be rewritten, in phase 5 of docs/REFACTOR_PLAN.md.
+module = ["pharmparser.ui.*"]
 check_untyped_defs = false
 
 [tool.pytest.ini_options]

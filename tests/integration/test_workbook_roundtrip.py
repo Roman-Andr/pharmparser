@@ -1,40 +1,24 @@
 """End-to-end workbook check that runs without Excel.
 
-Spreadsheet.export drives Excel over COM to inject the macro buttons, so it is
-Windows-only. The openpyxl half — which produces all of the actual content — is
-not, and this exercises it: build every sheet, save a real .xlsx, read it back.
+The macro buttons need Excel over COM, so they are Windows-only. The openpyxl
+half — which produces all of the actual content — is not, and this exercises it:
+build every sheet, save a real .xlsx, read it back.
 """
 
 from pathlib import Path
 
-from openpyxl import Workbook, load_workbook
+from openpyxl import load_workbook
 
 from pharmparser.config import ExportSettings
-from pharmparser.domain import PriceTable, absolute_difference, percentage_difference
-from pharmparser.excel.formatters import AnalysisFormatter, DataFormatter
-
-SHEETS = ["Данные", "Проценты", "Анализ"]
-
-
-def build_workbook(settings: ExportSettings, table: PriceTable) -> Workbook:
-    wb = Workbook()
-    wb.remove(wb.active)
-    formatters = [
-        (DataFormatter(settings, table, absolute_difference), "Данные"),
-        (DataFormatter(settings, table, percentage_difference), "Проценты"),
-        (AnalysisFormatter(settings, table), "Анализ"),
-    ]
-    for formatter, title in formatters:
-        formatter.format(wb.create_sheet(title))
-    return wb
+from pharmparser.domain import PriceTable
+from pharmparser.export import XlsxExporter, write_workbook
 
 
 def test_workbook_saves_and_reloads(tmp_path: Path, settings: ExportSettings, table: PriceTable) -> None:
-    target = tmp_path / "data.xlsx"
-    build_workbook(settings, table).save(target)
+    target = write_workbook(settings, table, tmp_path / "data.xlsx")
 
     reloaded = load_workbook(target)
-    assert reloaded.sheetnames == SHEETS
+    assert reloaded.sheetnames == ["Данные", "Проценты", settings.title]
 
     data = reloaded["Данные"]
     assert [cell.value for cell in data[3]] == [
@@ -51,16 +35,45 @@ def test_workbook_saves_and_reloads(tmp_path: Path, settings: ExportSettings, ta
     # Percentages differ from absolute differences on the same layout.
     assert reloaded["Проценты"]["D4"].value == 30.0
 
-    assert reloaded["Анализ"]["A1"].value == "Аптека 1"
-    assert reloaded["Анализ"]["B4"].value == 2  # "Позиций ниже всех" — the B2 fix
+    assert reloaded[settings.title]["A1"].value == "Аптека 1"
+    assert reloaded[settings.title]["B4"].value == 2  # "Позиций ниже всех" — the B2 fix
+
+
+def test_settings_title_names_the_sheet_and_the_document(
+    tmp_path: Path, table: PriceTable
+) -> None:
+    """B15: the setting used to be validated and then ignored by everything."""
+    settings = ExportSettings(title="Сводка")
+    reloaded = load_workbook(write_workbook(settings, table, tmp_path / "data.xlsx"))
+
+    assert reloaded.sheetnames == ["Данные", "Проценты", "Сводка"]
+    assert reloaded.properties.title == "Сводка"
 
 
 def test_conditional_formatting_survives_a_save(tmp_path: Path, settings: ExportSettings, table: PriceTable) -> None:
-    target = tmp_path / "data.xlsx"
-    build_workbook(settings, table).save(target)
+    target = write_workbook(settings, table, tmp_path / "data.xlsx")
 
     ranges = {str(rng.sqref) for rng in load_workbook(target)["Данные"].conditional_formatting}
     assert ranges == {"D4:D7", "F4:F7"}
+
+
+def test_autofilter_spans_the_data_block(tmp_path: Path, settings: ExportSettings, table: PriceTable) -> None:
+    target = write_workbook(settings, table, tmp_path / "data.xlsx")
+    assert load_workbook(target)["Данные"].auto_filter.ref == "A3:F7"
+
+
+def test_wide_workbook_is_styled_past_column_z(tmp_path: Path, settings: ExportSettings) -> None:
+    """Regression for B10, through the writer: 20 pharmacies reach column AN."""
+    from pharmparser.domain import Pharmacy
+
+    table = PriceTable.build(
+        (Pharmacy(id=str(i), name=f"Аптека {i}"), {"Аспирин": 5.0 + i}) for i in range(20)
+    )
+    sheet = load_workbook(write_workbook(settings, table, tmp_path / "wide.xlsx"))["Данные"]
+
+    assert sheet.auto_filter.ref == "A3:AN4"
+    assert sheet.column_dimensions["AN"].width == settings.diff_width
+    assert "AN4" in {str(rng.sqref) for rng in sheet.conditional_formatting}
 
 
 def test_single_pharmacy_workbook_is_still_valid(tmp_path: Path, settings: ExportSettings) -> None:
@@ -68,9 +81,15 @@ def test_single_pharmacy_workbook_is_still_valid(tmp_path: Path, settings: Expor
     from pharmparser.domain import Pharmacy
 
     table = PriceTable.build([(Pharmacy("1", "Аптека 1"), {"Аспирин": 5.0})])
-    target = tmp_path / "single.xlsx"
-    build_workbook(settings, table).save(target)
+    reloaded = load_workbook(write_workbook(settings, table, tmp_path / "single.xlsx"))
 
-    reloaded = load_workbook(target)
     assert [cell.value for cell in reloaded["Данные"][3]] == ["Название", "Аптека 1"]
-    assert reloaded["Анализ"]["B3"].value == 0  # mean competitor assortment
+    assert reloaded[settings.title]["B3"].value == 0  # mean competitor assortment
+
+
+def test_xlsx_exporter_writes_to_the_configured_file_name(
+    tmp_path: Path, settings: ExportSettings, table: PriceTable, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert XlsxExporter().export(settings, table) == Path("data.xlsx")
+    assert (tmp_path / "data.xlsx").exists()

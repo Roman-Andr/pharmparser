@@ -26,6 +26,17 @@ from pydantic.alias_generators import to_camel
 HexColour = Annotated[str, StringConstraints(pattern=r"^[0-9A-Fa-f]{6}$")]
 """An RRGGBB colour, as openpyxl's PatternFill expects it."""
 
+DATA_SHEET = "Данные"
+PERCENT_SHEET = "Проценты"
+"""The two fixed sheet names. Only the summary sheet is nameable, via ``title``."""
+
+DEFAULT_ANALYSIS_SHEET = "Анализ"
+
+ILLEGAL_SHEET_CHARACTERS = frozenset("[]:*?/\\")
+"""Characters Excel refuses in a worksheet name."""
+MAX_SHEET_NAME_LENGTH = 31
+"""Excel's own limit on a worksheet name."""
+
 
 class ExportSettings(BaseModel):
     """Appearance of the generated workbook."""
@@ -36,7 +47,14 @@ class ExportSettings(BaseModel):
     """Fill for a competitor price above the reference."""
     red: HexColour = "E81737"
     """Fill for a competitor price below the reference."""
-    title: str = "Отчёт"
+    title: str = DEFAULT_ANALYSIS_SHEET
+    """Name of the summary sheet, and the workbook's document title.
+
+    B15: this was loaded, validated and written back, but nothing ever read it.
+    It now names the analysis sheet — which is what the default, and the value in
+    real user configs, already spelled — so setting it has a visible effect
+    instead of being silently discarded.
+    """
     file_name: str = "data.xlsx"
     col_width: int = Field(default=50, gt=0)
     cell_width: int = Field(default=15, gt=0)
@@ -47,6 +65,24 @@ class ExportSettings(BaseModel):
     def _strip_hash(cls, value: Any) -> Any:
         """Accept ``#RRGGBB`` as well as ``RRGGBB``."""
         return value[1:] if isinstance(value, str) and value.startswith("#") else value
+
+    @field_validator("title")
+    @classmethod
+    def _must_be_a_usable_sheet_name(cls, value: str) -> str:
+        """Reject titles Excel would refuse or that would collide with a fixed sheet."""
+        title = value.strip()
+        if not title:
+            raise ValueError("settings.title names the analysis sheet and cannot be blank")
+        if len(title) > MAX_SHEET_NAME_LENGTH:
+            raise ValueError(
+                f"settings.title names the analysis sheet, so Excel limits it to "
+                f"{MAX_SHEET_NAME_LENGTH} characters; got {len(title)}"
+            )
+        if illegal := sorted(ILLEGAL_SHEET_CHARACTERS & set(title)):
+            raise ValueError(f"settings.title cannot contain {''.join(illegal)!r} — Excel forbids it in sheet names")
+        if title in (DATA_SHEET, PERCENT_SHEET):
+            raise ValueError(f"settings.title cannot be {title!r}; that is already a sheet in the report")
+        return title
 
     @property
     def macro_file_name(self) -> str:

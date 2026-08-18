@@ -13,8 +13,7 @@ import sys
 from pathlib import Path
 
 from .config import AppConfig, ConfigError, Profile, load_config
-from .export import write_workbook
-from .platform_ import supports_excel_macros
+from .export import select_exporter
 from .scraping import NoPharmaciesError, ScrapeError, scrape_profile
 
 logger = logging.getLogger(__name__)
@@ -60,16 +59,8 @@ def main(argv: list[str] | None = None) -> int:
 
         table = asyncio.run(scrape_profile(config.request, profile.pharmacies))
 
-        output = args.output or Path(config.settings.file_name)
-        write_workbook(config.settings, table, output)
-
-        if args.macros:
-            if not supports_excel_macros():
-                logger.warning("--macros needs Excel via COM, which is Windows only; wrote %s instead", output)
-            else:
-                from .export import export_with_macros
-
-                logger.info("Wrote %s", export_with_macros(config.settings, table))
+        exporter = select_exporter(macros=args.macros)
+        logger.info("Wrote %s", exporter.export(config.settings, table, args.output))
     except (ConfigError, NoPharmaciesError, ScrapeError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

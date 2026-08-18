@@ -7,7 +7,7 @@
   "settings": {
     "green": "19CF1F",
     "red": "E81737",
-    "title": "Отчёт",
+    "title": "Анализ",
     "fileName": "data.xlsx",
     "colWidth": 50,
     "cellWidth": 15,

@@ -311,7 +311,7 @@ old engine used, not captured from tabletka.by. They pin the parser's contract �
 price cleanup, tolerance of drift — but cannot prove the selectors still match the live site.
 Replacing them with real captured responses is the single highest-value follow-up.
 
-### Phase 3 — Rewrite the export layer
+### Phase 3 — Rewrite the export layer — **done**
 - Pure grid builders + golden-file tests.
 - Single `openpyxl` writer; conditional formatting and column widths driven by
   `get_column_letter`, not `ascii_uppercase`.
@@ -319,6 +319,45 @@ Replacing them with real captured responses is the single highest-value follow-u
   register their position code) and **B12** (write to a `tempfile` directory, one Excel process
   for the whole workbook, atomic replace at the end).
 - **Exit criteria:** a full `.xlsx` export runs and is verified by read-back in CI on Linux.
+
+**Outcome.** `excel/` is gone and `export/` replaces it, split three ways:
+`export/grids.py` decides what every sheet contains and how it is laid out and imports
+nothing but the domain and the config; `export/xlsx_writer.py` is the only module in the
+project that knows openpyxl; `export/vba/` holds the Windows-only macro buttons, with
+`pythoncom`/`win32com` imported inside `excel_application()` rather than at module scope.
+`export/protocols.py` defines an `Exporter`, implemented by `XlsxExporter` and
+`MacroExporter`, so the CLI and the UI pick a backend with `select_exporter()` instead of
+each branching on `supports_excel_macros()` themselves.
+
+A `Grid` is a frozen dataclass of rows plus layout — column widths by index, the header
+row, the difference columns, the two conditional-format colours — which is what makes the
+report assertable as data. `tests/fixtures/golden_grids.json` pins all three sheets;
+a diff there is the diff a user would see in Excel.
+
+**B1 is fixed and its strict xfail now passes as an ordinary test.** `Macro.code` became a
+property rendered on demand, so geometry registered by `Button.create()` — the only moment
+Excel has named and measured the shape — reaches the emitted `Sub`. That also gave the
+`Macro` ABC a real abstract member (`body`), retiring the `noqa: B024`.
+
+**B12 is fixed.** One Excel session opens the workbook once and injects every sheet, working
+inside a `TemporaryDirectory` created *next to the target* so the final `os.replace` stays on
+one filesystem. The `0data.xlsm`/`1data.xlsm` chain, the `remove("-1data.xlsm")` off-by-one,
+the per-sheet Excel process and the `gen_py` cache scrub are all gone. `tests/fakes.py` stands
+in for the COM object model, so `tests/integration/test_macro_export.py` exercises the whole
+Windows-only path on Linux — including asserting that exactly one Excel process starts and
+that nothing but the target file is left behind.
+
+**B15 is fixed by wiring `settings.title` up, not by dropping it.** It now names the analysis
+sheet and sets the workbook's document title. The default changed from `"Отчёт"` to `"Анализ"`,
+which is what the sheet was hardcoded to and what real configs already set — so behaviour is
+unchanged for existing users while the setting becomes live. Because it names a worksheet,
+it is validated as one: non-empty, at most 31 characters, none of ``[]:*?/\``, and not
+colliding with `Данные` or `Проценты`, each with an error that says which rule was broken.
+
+**`utils/` is gone (A3).** `FilterCriteria` and `SortOrder` were VBA vocabulary and moved to
+`export/vba/criteria.py`; `file_utils.py` existed only for the temp-file dance B12 deleted.
+`win32api.RGB` is likewise gone — the colour is packed arithmetically, so describing a button
+needs nothing from Windows and only drawing one does.
 
 ### Phase 4 — Config and persistence — **done** (pulled forward)
 - Validated models, actionable errors, first-run bootstrap from the example, atomic save,

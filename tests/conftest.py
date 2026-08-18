@@ -1,9 +1,15 @@
 """Shared pytest fixtures."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 import pytest
 
 from pharmparser.config import ExportSettings
 from pharmparser.domain import Pharmacy, PriceTable
+from pharmparser.export.vba import injector
+
+from .fakes import FakeExcel
 
 
 @pytest.fixture
@@ -42,3 +48,28 @@ def table(price_table: dict[str, dict[str, float]]) -> PriceTable:
         (Pharmacy(id=str(i), name=name), prices)
         for i, (name, prices) in enumerate(price_table.items(), start=1)
     )
+
+
+@pytest.fixture
+def excel_sessions(monkeypatch: pytest.MonkeyPatch) -> list[FakeExcel]:
+    """Replaces the Excel COM session with a recorder.
+
+    COM is the only Windows-only part of the .xlsm export, so standing in for it
+    lets the whole macro path run in CI — and lets a test assert how many Excel
+    processes were started (B12).
+    """
+    sessions: list[FakeExcel] = []
+
+    @contextmanager
+    def fake_application() -> Iterator[FakeExcel]:
+        excel = FakeExcel()
+        sessions.append(excel)
+        excel.Visible = False
+        excel.DisplayAlerts = False
+        try:
+            yield excel
+        finally:
+            excel.Quit()
+
+    monkeypatch.setattr(injector, "excel_application", fake_application)
+    return sessions

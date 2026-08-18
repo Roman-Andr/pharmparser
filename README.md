@@ -135,12 +135,13 @@ pharmparser/
 │   │   └── analysis.py        # comparisons, market summary
 │   ├── config/                # pydantic schema, loader, env overrides
 │   ├── scraping/              # async client, pure HTML parser, fan-out service
-│   ├── export.py              # price table -> workbook
+│   ├── export/                # price table -> workbook
+│   │   ├── grids.py           # pure sheet builders (content + layout)
+│   │   ├── xlsx_writer.py     # the only module that knows openpyxl
+│   │   └── vba/               # Windows-only macro buttons, imported lazily
 │   ├── cache.py               # per-profile scrape cache
 │   ├── platform_.py           # OS capability probes
-│   ├── ui/                    # CustomTkinter windows and widgets
-│   ├── utils/                 # small shared enums and helpers
-│   └── excel/                 # Excel formatting, macros and export
+│   └── ui/                    # CustomTkinter windows and widgets
 ├── tests/
 │   ├── unit/
 │   └── integration/           # workbook round-trip, no Excel required

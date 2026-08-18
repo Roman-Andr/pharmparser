@@ -65,7 +65,7 @@
       "Sec-Fetch-Mode": "cors",
       "Sec-Fetch-Dest": "empty",
       "host": "tabletka.by",
-      "Cookie": "PHPSESSID=REDACTED; _csrf=REDACTED; allow-cookies=; lim-result=5000; region=%D0%93%D0%BE%D0%BC%D0%B5%D0%BB%D1%8C; regionId=36"
+      "Cookie": "PHPSESSID=REDACTED; __gads=ID=0000000000000000:T=1700000000:RT=1700000000:S=ALNI_REDACTED; __gpi=UID=0000000000000000:T=1700000000:RT=1700000000:S=ALNI_REDACTED; _csrf=REDACTED; _fbp=fb.1.1700000000000.000000000000000000; _ga=GA1.1.0000000000.1700000000; _ga_S6LL4MRH46=GS1.1.1700000000.1.1.1700000000.0.0.0; _gcl_au=1.1.000000000.1700000000; _ym_d=1700000000; _ym_isad=2; _ym_uid=170000000000000000; _ym_visorc=b; allow-cookies=; lim-result=5000; region=%D0%93%D0%BE%D0%BC%D0%B5%D0%BB%D1%8C; regionId=36"
     },
     "data": {
       "sort": "name",

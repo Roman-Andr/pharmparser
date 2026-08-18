@@ -177,3 +177,32 @@ def test_env_overrides_replace_the_csrf_token(tmp_path: Path, monkeypatch: pytes
 def test_absent_env_leaves_the_file_untouched() -> None:
     config = AppConfig.model_validate(RAW)
     assert EnvOverrides(cookie=None, csrf=None, file_name=None).apply(config) == config
+
+
+# -- settings.title (B15) ------------------------------------------------------
+
+
+def test_title_defaults_to_the_analysis_sheet_name() -> None:
+    assert ExportSettings().title == "Анализ"
+
+
+def test_title_is_stripped() -> None:
+    assert ExportSettings(title="  Сводка  ").title == "Сводка"
+
+
+@pytest.mark.parametrize(
+    ("title", "reason"),
+    [
+        ("", "cannot be blank"),
+        ("   ", "cannot be blank"),
+        ("Отчёт по аптекам за прошлый календарный месяц", "31 characters"),
+        ("Отчёт/сводка", "Excel forbids it"),
+        ("Данные", "already a sheet"),
+        ("Проценты", "already a sheet"),
+    ],
+)
+def test_unusable_titles_are_rejected_with_an_actionable_message(title: str, reason: str) -> None:
+    """It names a worksheet now, so Excel's rules apply — and are explained."""
+    with pytest.raises(ValidationError) as error:
+        ExportSettings(title=title)
+    assert reason in str(error.value)

@@ -3,13 +3,14 @@
 ``tests/fixtures/real_world_config.json`` is a real configuration with the
 credentials redacted — six profiles, Cyrillic and Latin pharmacy names, names
 carrying trailing and doubled spaces, the same pharmacy id reused across
-profiles, a full browser header set (including a lowercase ``host`` and an
-explicit ``Content-Type`` alongside form-encoded data) and non-default column
-widths.
+profiles, a full browser header set (including a lowercase ``host``, an explicit
+``Content-Type`` alongside form-encoded data and the browser's whole sixteen-key
+cookie) and non-default column widths.
 
 These guard the promise that existing config files keep working unchanged.
 """
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -20,6 +21,8 @@ from openpyxl import load_workbook
 
 from pharmparser.cli import main
 from pharmparser.config import load_config, save_config
+from pharmparser.export import export_with_macros
+from pharmparser.scraping import scrape_profile
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "real_world_config.json"
 URL = "https://tabletka.by/ajax-request/reload-pharmacy-price"
@@ -137,3 +140,48 @@ def test_every_profile_can_be_selected(config_file: Path, tmp_path: Path) -> Non
             stub(mocked, pharmacies)
             assert main(["--config", str(config_file), "--profile", name, "--output", str(output)]) == 0
         assert load_workbook(output)["Данные"].max_column == 2 + 2 * (pharmacies - 1)
+
+
+def test_the_whole_browser_cookie_survives_to_the_request(config_file: Path, tmp_path: Path) -> None:
+    """Only ``lim-result`` is rewritten; the other fifteen cookies travel untouched."""
+    with aioresponses() as mocked:
+        stub(mocked, 9)
+        assert main(["--config", str(config_file), "--output", str(tmp_path / "r.xlsx")]) == 0
+        sent = mocked.requests[("POST", aiohttp.helpers.URL(URL))][0]
+
+    configured = load_config(config_file).request.cookie
+    keys = [cookie.split("=", 1)[0].strip() for cookie in sent.kwargs["headers"]["Cookie"].split(";")]
+    assert keys == [cookie.split("=", 1)[0].strip() for cookie in configured.split(";")]
+    assert "region=%D0%93%D0%BE%D0%BC%D0%B5%D0%BB%D1%8C" in sent.kwargs["headers"]["Cookie"]
+
+
+def test_the_configured_title_names_the_analysis_sheet(config_file: Path, tmp_path: Path) -> None:
+    """B15, against the real value: this config sets ``title`` to "Анализ"."""
+    output = tmp_path / "report.xlsx"
+    with aioresponses() as mocked:
+        stub(mocked, 9)
+        assert main(["--config", str(config_file), "--profile", "Profile 1", "--output", str(output)]) == 0
+
+    workbook = load_workbook(output)
+    assert load_config(config_file).settings.title == "Анализ"
+    assert workbook.sheetnames == ["Данные", "Проценты", "Анализ"]
+    assert workbook.properties.title == "Анализ"
+
+
+def test_the_macro_export_runs_over_the_real_profile(
+    config_file: Path, tmp_path: Path, excel_sessions: list
+) -> None:
+    """The nine-pharmacy profile through the .xlsm path: one Excel, one output file."""
+    config = load_config(config_file)
+    with aioresponses() as mocked:
+        stub(mocked, 9)
+        table = asyncio.run(scrape_profile(config.request, config.profiles[0].pharmacies))
+
+    target = export_with_macros(config.settings, table, tmp_path / "data.xlsm")
+
+    assert len(excel_sessions) == 1
+    assert [path.name for path in tmp_path.iterdir()] == ["config.json", "data.xlsm"]
+    workbook = excel_sessions[0].opened[0]
+    # 8 competitors -> 8 difference columns -> 16 sort buttons plus the 2 filter ones.
+    assert len(workbook.Sheets("Данные").Shapes.shapes) == 18
+    assert target.exists()

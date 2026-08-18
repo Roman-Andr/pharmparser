@@ -1,16 +1,18 @@
 """Characterisation tests for the generated VBA.
 
-These lock in the exact macro source so the phase 3 rewrite can be verified as
-behaviour-preserving. They also pin bug B1 from docs/REFACTOR_PLAN.md: macro
-source is interpolated in ``__init__``, but ``position_codes`` is only filled
-later by ``Button.create()``, so the button save/restore geometry never reaches
-the workbook.
+These lock in the exact macro source, so the phase 3 rewrite is verifiable as
+behaviour-preserving, and they cover bug B1: macro source used to be interpolated
+in ``__init__``, but ``position_codes`` is only filled later by ``Button.create()``,
+so the button save/restore geometry never reached the workbook.
 """
 
-import pytest
-
-from pharmparser.excel.macros import ApplyFiltersMacro, RemoveFiltersMacro, SortMacro
-from pharmparser.utils import FilterCriteria, SortOrder
+from pharmparser.export.vba import (
+    ApplyFiltersMacro,
+    FilterCriteria,
+    RemoveFiltersMacro,
+    SortMacro,
+    SortOrder,
+)
 
 
 def test_sort_macro_emits_single_line_sort_statement() -> None:
@@ -32,12 +34,37 @@ def test_apply_filters_macro_carries_the_criteria() -> None:
     assert 'Criteria1:=">0"' in macro.code
 
 
-@pytest.mark.xfail(
-    reason="B1: code is interpolated in __init__, before add_position_code runs; "
-    "fixed in phase 3",
-    strict=True,
-)
 def test_position_code_reaches_the_generated_macro() -> None:
+    """Regression for B1.
+
+    ``code`` is rendered on demand, so geometry registered after construction —
+    which is the only time it can be known — is part of the emitted ``Sub``.
+    """
     macro = SortMacro("D", 6, SortOrder.ASCENDING, "Data")
     macro.add_position_code("Dim btnFoo As Shape", "btnFoo.Left = btnFooLeft")
     assert "Dim btnFoo As Shape" in macro.code
+    assert "btnFoo.Left = btnFooLeft" in macro.code
+
+
+def test_position_code_brackets_the_macro_body() -> None:
+    """The save runs before the sort and the restore after it, or the geometry is lost."""
+    macro = SortMacro("D", 6, SortOrder.ASCENDING, "Data")
+    macro.add_position_code("SAVE_MARKER", "RESTORE_MARKER")
+    code = macro.code
+    assert code.index("SAVE_MARKER") < code.index("Key1:=") < code.index("RESTORE_MARKER")
+
+
+def test_every_macro_renders_registered_geometry() -> None:
+    macros = [
+        SortMacro("D", 6, SortOrder.DESCENDING, "Data"),
+        RemoveFiltersMacro(6, "Data"),
+        ApplyFiltersMacro(6, FilterCriteria.LESS_THAN_ZERO, "Data"),
+    ]
+    for macro in macros:
+        macro.add_position_code("SAVE_MARKER", "RESTORE_MARKER")
+        assert "SAVE_MARKER" in macro.code, macro.name
+        assert "RESTORE_MARKER" in macro.code, macro.name
+
+
+def test_a_macro_without_buttons_still_renders() -> None:
+    assert "Sub RemoveFilters_Data()" in RemoveFiltersMacro(6, "Data").code

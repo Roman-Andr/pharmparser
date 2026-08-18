@@ -10,8 +10,8 @@ from ..cache import read_table, write_table
 from ..config import AppConfig, ConfigError, cache_path, config_path, load_config, save_config
 from ..config import Profile as ProfileConfig
 from ..domain import PriceTable
-from ..export import export_with_macros, write_workbook
-from ..platform_ import open_file, supports_excel_macros
+from ..export import select_exporter
+from ..platform_ import open_file
 from ..scraping import NoPharmaciesError, ScrapeError, scrape_profile
 from .profile import Profile
 from .profile_selector import ProfileSelector
@@ -117,10 +117,7 @@ class App(CTk):
 
     def _write(self, table: PriceTable) -> Path:
         settings = self.app_config.settings
-        if supports_excel_macros():
-            return Path(export_with_macros(settings, table)).absolute()
-        logger.info("Excel is unavailable; writing a plain .xlsx without the macro buttons")
-        return write_workbook(settings, table, Path(settings.file_name)).absolute()
+        return select_exporter().export(settings, table).absolute()
 
     def _succeeded(self, path: Path) -> None:
         self._stop_progress()

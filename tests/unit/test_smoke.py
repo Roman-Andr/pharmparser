@@ -1,15 +1,16 @@
 """Baseline import and enum checks."""
 
 from pharmparser.config import ExportSettings
-from pharmparser.utils import FilterCriteria, SortOrder
+from pharmparser.export.vba import FilterCriteria, SortOrder
 
 
 def test_package_imports_without_windows() -> None:
-    """The Excel package must import on Linux; only COM *use* requires Windows."""
-    import pharmparser.excel
-    import pharmparser.excel.spreadsheet
+    """The VBA package must import on Linux; only COM *use* requires Windows."""
+    import pharmparser.export
+    import pharmparser.export.vba.injector
 
-    assert pharmparser.excel.spreadsheet.Spreadsheet is not None
+    assert pharmparser.export.MacroExporter is not None
+    assert pharmparser.export.vba.injector.inject is not None
 
 
 def test_cli_imports_without_a_display() -> None:
