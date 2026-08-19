@@ -37,8 +37,21 @@ and therefore stopped styling at Z, silently dropping column widths and conditio
 formatting past ~13 pharmacies.
 """
 
-BREAKDOWN_COLUMNS = 5
-"""Columns used by the per-competitor table on the analysis sheet."""
+ANALYSIS_COLUMNS = 9
+"""Columns used by the redesigned analysis dashboard."""
+
+
+@dataclass(frozen=True, slots=True)
+class AnalysisPresentation:
+    """Semantic layout metadata for the styled analysis dashboard."""
+
+    merged_ranges: tuple[tuple[int, int, int, int], ...]
+    section_rows: tuple[int, ...]
+    metric_rows: tuple[int, ...]
+    table_header_row: int
+    table_first_row: int
+    table_last_row: int
+    note_rows: tuple[int, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +77,8 @@ class Grid:
     """Fill for a negative difference — the competitor undercuts the reference."""
     above_colour: str | None = None
     """Fill for a positive difference — the competitor is dearer."""
+    analysis_presentation: AnalysisPresentation | None = None
+    """Present only for the dashboard sheet; interpreted by the workbook writer."""
 
     @property
     def last_row(self) -> int:
@@ -98,9 +113,7 @@ def _data_rows(table: PriceTable, difference: DifferenceFn) -> list[tuple[Cell, 
     return rows
 
 
-def build_data_grid(
-    settings: ExportSettings, table: PriceTable, difference: DifferenceFn, title: str
-) -> Grid:
+def build_data_grid(settings: ExportSettings, table: PriceTable, difference: DifferenceFn, title: str) -> Grid:
     """A price sheet: one row per item, a price and a difference per competitor."""
     # "Название" + the reference price, then a price and a difference per competitor.
     width = 2 + 2 * len(table.competitors)
@@ -126,27 +139,130 @@ def build_data_grid(
 
 
 def build_analysis_grid(settings: ExportSettings, table: PriceTable) -> Grid:
-    """The summary sheet. Named after ``settings.title`` (B15)."""
+    """Build the presentation-ready market dashboard."""
     summary = summarise(table)
     breakdown: list[tuple[Cell, ...]] = [
-        (stats.pharmacy.name, stats.assortment, stats.dearer, stats.cheaper, stats.unique)
+        (
+            stats.pharmacy.name,
+            stats.assortment,
+            stats.shared,
+            stats.dearer,
+            stats.cheaper,
+            stats.equal,
+            stats.unique,
+            _round_metric(stats.mean_price),
+            _round_metric(stats.mean_difference_percent),
+        )
         for stats in summary.competitors
     ]
+    table_header_row = 14
+    table_first_row = table_header_row + 1
+    table_last_row = table_header_row + len(breakdown)
+    note_row = table_last_row + 2
     return Grid(
         title=settings.title,
         rows=(
-            (summary.reference.name,),
-            ("Асортимент", summary.assortment),
-            ("Средний асортимент конкурентов", summary.mean_competitor_assortment),
-            ("Позиций ниже всех", summary.cheapest_everywhere),
-            ("Уникальных позиций", summary.unique_items),
-            ("", "Асортимент", "Дороже", "Дешевле", "Уникальных"),
+            ("АНАЛИЗ ЦЕН И АССОРТИМЕНТА",),
+            (
+                f"Базовая аптека: {summary.reference.name}",
+                None,
+                None,
+                None,
+                None,
+                None,
+                "Конкурентов",
+                None,
+                len(summary.competitors),
+            ),
+            (),
+            ("КЛЮЧЕВЫЕ ПОКАЗАТЕЛИ",),
+            (
+                "Ассортимент",
+                summary.assortment,
+                "Средняя цена, BYN",
+                _round_metric(summary.mean_price),
+                "Дешевле всех",
+                summary.cheapest_everywhere,
+                "Только у нас",
+                summary.unique_items,
+            ),
+            (
+                "Позиций на рынке",
+                summary.market_assortment,
+                "Средний ассортимент конкурентов",
+                _round_metric(summary.mean_competitor_assortment),
+                "Общих с рынком",
+                summary.shared_market_items,
+                "Только у конкурентов",
+                summary.competitor_only_items,
+            ),
+            (),
+            ("ЦЕНОВАЯ ПОЗИЦИЯ",),
+            (
+                "Сравнимых пар цен",
+                summary.comparisons,
+                "У нас дешевле",
+                summary.reference_cheaper,
+                "У нас дороже",
+                summary.reference_dearer,
+                "Цена совпадает",
+                summary.equal_prices,
+            ),
+            (
+                "Средняя разница, BYN",
+                _round_metric(summary.mean_difference),
+                "Средняя разница, %",
+                _round_metric(summary.mean_difference_percent),
+                "Доля выгодных сравнений, %",
+                _round_metric(summary.advantageous_share),
+            ),
+            ("Положительная разница означает, что цена конкурента выше.",),
+            (),
+            ("СРАВНЕНИЕ С КОНКУРЕНТАМИ",),
+            (
+                "Аптека",
+                "Ассортимент",
+                "Общие позиции",
+                "У нас дешевле",
+                "У нас дороже",
+                "Цена равна",
+                "Только у конкурента",
+                "Средняя цена, BYN",
+                "Разница, %",
+            ),
             *breakdown,
+            (),
+            (
+                "«Дешевле всех» учитывает только позиции хотя бы с одной ценой конкурента; "
+                "уникальные позиции считаются отдельно.",
+            ),
         ),
-        width=BREAKDOWN_COLUMNS,
-        column_widths={1: settings.col_width},
-        default_column_width=settings.cell_width,
+        width=ANALYSIS_COLUMNS,
+        column_widths={1: 30, 2: 15, 3: 22, 4: 17, 5: 17, 6: 15, 7: 22, 8: 20, 9: 16},
+        default_column_width=17,
+        analysis_presentation=AnalysisPresentation(
+            merged_ranges=(
+                (1, 1, 1, 9),
+                (2, 1, 2, 6),
+                (2, 7, 2, 8),
+                (4, 1, 4, 9),
+                (8, 1, 8, 9),
+                (11, 1, 11, 9),
+                (13, 1, 13, 9),
+                (note_row, 1, note_row, 9),
+            ),
+            section_rows=(4, 8, 13),
+            metric_rows=(5, 6, 9, 10),
+            table_header_row=table_header_row,
+            table_first_row=table_first_row,
+            table_last_row=table_last_row,
+            note_rows=(11, note_row),
+        ),
     )
+
+
+def _round_metric(value: float) -> float:
+    return round(value, 2)
 
 
 def build_grids(settings: ExportSettings, table: PriceTable) -> list[Grid]:

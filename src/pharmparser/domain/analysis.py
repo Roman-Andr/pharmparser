@@ -51,21 +51,41 @@ class ComparisonRow:
 class CompetitorStats:
     pharmacy: Pharmacy
     assortment: int
+    shared: int
+    """Items stocked by both the reference and this competitor."""
     dearer: int
     """Items the reference stocks more cheaply than this competitor."""
     cheaper: int
     """Items this competitor stocks more cheaply than the reference."""
+    equal: int
+    """Items whose prices are equal."""
     unique: int
     """Items this competitor stocks and the reference does not."""
+    mean_price: float
+    mean_difference: float
+    """Mean competitor minus reference price for shared items, in roubles."""
+    mean_difference_percent: float
+    """Mean competitor minus reference price for shared items, in percent."""
 
 
 @dataclass(frozen=True, slots=True)
 class MarketSummary:
     reference: Pharmacy
     assortment: int
+    market_assortment: int
+    mean_price: float
     mean_competitor_assortment: float
     cheapest_everywhere: int
     unique_items: int
+    shared_market_items: int
+    competitor_only_items: int
+    comparisons: int
+    reference_cheaper: int
+    reference_dearer: int
+    equal_prices: int
+    mean_difference: float
+    mean_difference_percent: float
+    advantageous_share: float
     competitors: tuple[CompetitorStats, ...]
 
 
@@ -101,13 +121,18 @@ def count_cheapest_everywhere(table: PriceTable) -> int:
             for competitor in table.competitors
             if (competitor_price := table.price_of(competitor, item)) is not None
         ]
-        if all(price < competitor_price for competitor_price in competitor_prices):
+        # ``all([])`` is true, but an item with no competing offer is unique,
+        # not a price victory. Keeping these metrics mutually exclusive makes
+        # the dashboard totals intelligible.
+        if competitor_prices and all(price < competitor_price for competitor_price in competitor_prices):
             total += 1
     return total
 
 
 def count_unique_items(table: PriceTable) -> int:
     """Items only the reference stocks."""
+    if not table.competitors:
+        return 0
     reference = table.reference
     return sum(
         1
@@ -121,23 +146,59 @@ def competitor_stats(table: PriceTable, competitor: Pharmacy) -> CompetitorStats
     reference_prices = table.prices_for(reference)
     competitor_prices = table.prices_for(competitor)
     shared = [(price, competitor_prices[item]) for item, price in reference_prices.items() if item in competitor_prices]
+    percentage_differences = [percentage_difference(price, other) for price, other in shared if price]
     return CompetitorStats(
         pharmacy=competitor,
         assortment=len(competitor_prices),
+        shared=len(shared),
         dearer=sum(1 for price, other in shared if price < other),
         cheaper=sum(1 for price, other in shared if price > other),
+        equal=sum(1 for price, other in shared if price == other),
         unique=sum(1 for item in competitor_prices if item not in reference_prices),
+        mean_price=mean(competitor_prices.values()) if competitor_prices else 0,
+        mean_difference=mean(other - price for price, other in shared) if shared else 0,
+        mean_difference_percent=mean(percentage_differences) if percentage_differences else 0,
     )
 
 
 def summarise(table: PriceTable) -> MarketSummary:
     """Everything the "Анализ" sheet reports."""
+    reference_prices = table.prices_for(table.reference)
     competitor_sizes = [table.assortment(competitor) for competitor in table.competitors]
+    stats = tuple(competitor_stats(table, competitor) for competitor in table.competitors)
+    competitor_items = {item for competitor in table.competitors for item in table.prices_for(competitor)}
+    comparisons = sum(entry.shared for entry in stats)
+    reference_cheaper = sum(entry.dearer for entry in stats)
+    reference_dearer = sum(entry.cheaper for entry in stats)
+    equal_prices = sum(entry.equal for entry in stats)
+    differences = [
+        other - price
+        for competitor in table.competitors
+        for item, price in reference_prices.items()
+        if (other := table.price_of(competitor, item)) is not None
+    ]
+    percentage_differences = [
+        percentage_difference(price, other)
+        for competitor in table.competitors
+        for item, price in reference_prices.items()
+        if price and (other := table.price_of(competitor, item)) is not None
+    ]
     return MarketSummary(
         reference=table.reference,
         assortment=table.assortment(table.reference),
+        market_assortment=len(set(reference_prices) | competitor_items),
+        mean_price=mean(reference_prices.values()) if reference_prices else 0,
         mean_competitor_assortment=mean(competitor_sizes) if competitor_sizes else 0,
         cheapest_everywhere=count_cheapest_everywhere(table),
         unique_items=count_unique_items(table),
-        competitors=tuple(competitor_stats(table, competitor) for competitor in table.competitors),
+        shared_market_items=len(set(reference_prices) & competitor_items),
+        competitor_only_items=len(competitor_items - set(reference_prices)),
+        comparisons=comparisons,
+        reference_cheaper=reference_cheaper,
+        reference_dearer=reference_dearer,
+        equal_prices=equal_prices,
+        mean_difference=mean(differences) if differences else 0,
+        mean_difference_percent=mean(percentage_differences) if percentage_differences else 0,
+        advantageous_share=reference_cheaper / comparisons * 100 if comparisons else 0,
+        competitors=stats,
     )
