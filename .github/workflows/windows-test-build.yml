@@ -1,0 +1,57 @@
+name: Windows test build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/react-desktop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-test-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: bun install --frozen-lockfile
+
+      - name: Build frontend
+        working-directory: frontend
+        run: bun run build
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v9
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      - name: Install Python dependencies
+        run: uv sync --all-groups --frozen
+
+      - name: Build Windows executables
+        run: uv run pyinstaller --noconfirm pharmparser.spec
+
+      - name: Smoke-test CLI executable
+        run: .\dist\pharmparser-cli.exe --help
+
+      - name: Upload Windows executables
+        uses: actions/upload-artifact@v7
+        with:
+          name: pharmparser-windows-x64-${{ github.sha }}
+          path: |
+            dist/pharmparser.exe
+            dist/pharmparser-cli.exe
+          if-no-files-found: error
+          retention-days: 7
