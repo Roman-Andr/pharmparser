@@ -1,9 +1,9 @@
 """Assembling the VBA module the workbook ships with.
 
-The COM path lets Excel name each shape and then brackets every macro with code that
-saves and restores those shapes' geometry. The cross-platform packer never gets shape
-names from Excel, so it pins the shapes instead — one helper, called by every macro,
-which is both shorter and what the geometry dance was trying to achieve.
+The cross-platform packer writes legacy VML form buttons whose anchors are already
+outside the sortable range. Unlike shapes created through Excel itself, those controls
+can reject a runtime write to ``Shape.Placement`` with COM error 80020009, so their
+placement is left entirely to the workbook markup.
 """
 
 from __future__ import annotations
@@ -14,19 +14,10 @@ from .button import Button
 
 MODULE_NAME = "PharmParser"
 
-PIN_SHAPES = "PharmParserPinShapes"
-
-PIN_SHAPES_HELPER = f"""Private Sub {PIN_SHAPES}()
-    Dim shp As Shape
-    For Each shp In ActiveSheet.Shapes
-        shp.Placement = xlFreeFloating
-    Next shp
-End Sub"""
-
 
 def module_source(sheets: Mapping[str, Sequence[Button]]) -> str:
     """Render one module holding every macro the workbook's buttons reference."""
-    parts = ["Option Explicit", PIN_SHAPES_HELPER]
+    parts = ["Option Explicit"]
     seen: set[str] = set()
 
     for buttons in sheets.values():
@@ -35,7 +26,6 @@ def module_source(sheets: Mapping[str, Sequence[Button]]) -> str:
             if macro.name in seen:
                 continue
             seen.add(macro.name)
-            macro.prologue = PIN_SHAPES
             parts.append(_dedent(macro.code))
 
     return "\n\n".join(parts) + "\n"

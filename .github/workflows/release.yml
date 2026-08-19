@@ -36,7 +36,7 @@ jobs:
       tag: ${{ steps.release.outputs.tag_name }}
       version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v5
         id: release
         with:
           config-file: release-please-config.json
@@ -71,7 +71,7 @@ jobs:
             platform: linux-x64
             suffix: ""
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.target.outputs.tag }}
 
@@ -123,7 +123,7 @@ jobs:
           cp "dist/pharmparser$SUFFIX" "release/pharmparser-$VERSION-$PLATFORM$SUFFIX"
           cp "dist/pharmparser-cli$SUFFIX" "release/pharmparser-cli-$VERSION-$PLATFORM$SUFFIX"
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.os }}
           path: release/
@@ -137,7 +137,7 @@ jobs:
       id-token: write      # sign the provenance attestation
       attestations: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           pattern: release-*
           merge-multiple: true
@@ -149,7 +149,7 @@ jobs:
         run: sha256sum * | tee SHA256SUMS
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: release/pharmparser-*
 

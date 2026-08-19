@@ -56,11 +56,6 @@ class Macro(ABC):
         self.end_column = end_column
         self.data_range = f"A{FIRST_DATA_ROW}:{get_column_letter(end_column)}{LAST_DATA_ROW}"
         self.position_codes: list[tuple[str, str]] = []
-        self.prologue = ""
-        """A statement run first, before the saved geometry is read.
-
-        The cross-platform packer uses it to pin every shape in place, which the
-        COM path achieves with :attr:`position_codes` instead."""
 
     def add_position_code(self, save: str, restore: str) -> None:
         """Register a button's geometry to be saved and restored around this macro."""
@@ -83,7 +78,6 @@ class Macro(ABC):
         return f"""
         Sub {self.name}()
             Application.ScreenUpdating = False
-            {self.prologue}
             {saves}
             {self.body}
             {restores}
