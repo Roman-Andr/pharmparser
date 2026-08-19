@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/Roman-Andr/pharmparser/compare/v0.2.2...v0.3.0) (2026-08-19)
+
+
+### Features
+
+* redesign analysis dashboard ([21eb68f](https://github.com/Roman-Andr/pharmparser/commit/21eb68f14906e753e9474a987ffb6943594e1982))
+
+
+### Fixes
+
+* reset PyInstaller state on update restart ([3bc9247](https://github.com/Roman-Andr/pharmparser/commit/3bc92474bfd9cef98c33115cfc531c0860ed0e24))
+
 ## [0.2.2](https://github.com/Roman-Andr/pharmparser/compare/v0.2.1...v0.2.2) (2026-08-19)
 
 
