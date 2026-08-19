@@ -23,6 +23,20 @@ class Credentials(BaseModel):
     def masked(self) -> str:
         return "••••••••" if self.cookie else ""
 
+    @property
+    def is_usable(self) -> bool:
+        placeholders = {"redacted", "<redacted>", "..."}
+        cookie = self.cookie.strip().casefold()
+        csrf = self.csrf.strip().casefold()
+        return (
+            "=" in self.cookie
+            and cookie not in placeholders
+            and "redacted" not in cookie
+            and bool(csrf)
+            and csrf not in placeholders
+            and "redacted" not in csrf
+        )
+
 
 class CredentialStatus(BaseModel):
     configured: bool
@@ -132,20 +146,23 @@ class CredentialService:
             credentials = self._backend.get()
         except Exception:
             credentials = None
+        configured = credentials is not None and credentials.is_usable
         return CredentialStatus(
-            configured=credentials is not None,
+            configured=configured,
             backend=self._backend.name,
-            masked_cookie=credentials.masked() if credentials else None,
+            masked_cookie=credentials.masked() if configured and credentials else None,
             warning=self._backend.warning,
         )
 
     def get(self) -> Credentials:
         credentials = self._backend.get()
-        if credentials is None:
+        if credentials is None or not credentials.is_usable:
             raise RuntimeError("учетные данные не настроены")
         return credentials
 
     def update(self, credentials: Credentials) -> CredentialStatus:
+        if not credentials.is_usable:
+            raise ValueError("Cookie или CSRF пусты либо содержат тестовые заглушки")
         try:
             self._backend.set(credentials)
             read_back = self._backend.get()

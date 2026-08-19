@@ -25,7 +25,7 @@ async def test_api_requires_bearer_token_and_never_returns_secret(tmp_path: Path
         await api.put(
             "/api/credentials",
             headers={"Authorization": "Bearer test-token"},
-            json={"cookie": "secret-cookie", "csrf": "secret-csrf"},
+            json={"cookie": "session=secret-cookie", "csrf": "secret-csrf"},
         )
         response = await api.get("/api/bootstrap", headers={"Authorization": "Bearer test-token"})
         assert response.status_code == 200

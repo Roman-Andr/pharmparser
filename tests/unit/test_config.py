@@ -1,13 +1,22 @@
 """Tests for the pydantic configuration schema and loader."""
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
-from pharmparser.config import AppConfig, ConfigError, ExportSettings, PharmacyEntry, Profile, RequestConfig
+from pharmparser.config import (
+    AppConfig,
+    ConfigError,
+    ExportSettings,
+    PharmacyEntry,
+    Profile,
+    RequestConfig,
+    legacy_config_path,
+)
 from pharmparser.config.env import EnvOverrides
 from pharmparser.config.loader import load_config, save_config
 
@@ -143,6 +152,22 @@ def test_save_is_atomic(tmp_path: Path) -> None:
 def test_missing_config_gives_an_actionable_message(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match=r"config\.json\.example"):
         load_config(tmp_path / "config.json")
+
+
+def test_frozen_app_finds_legacy_config_beside_the_executable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executable_dir = tmp_path / "app"
+    executable_dir.mkdir()
+    expected = executable_dir / "config.json"
+    expected.write_text("{}", encoding="utf-8")
+    working_dir = tmp_path / "elsewhere"
+    working_dir.mkdir()
+    monkeypatch.chdir(working_dir)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(executable_dir / "pharmparser.exe"))
+
+    assert legacy_config_path() == expected
 
 
 def test_malformed_json_is_reported_as_such(tmp_path: Path) -> None:

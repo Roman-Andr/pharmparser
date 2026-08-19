@@ -42,6 +42,15 @@ def config_file(tmp_path: Path, endpoint: FakeEndpoint) -> Path:
     path = tmp_path / "config.json"
     raw = json.loads(FIXTURE.read_text(encoding="utf-8"))
     raw["request"]["url"] = endpoint.url
+    # Keep the real cookie shape while replacing explicit redaction markers with
+    # harmless test values. Production treats REDACTED as missing credentials and
+    # establishes a public session before the first POST.
+    raw["request"]["headers"]["Cookie"] = raw["request"]["headers"]["Cookie"].replace(
+        "REDACTED", "test"
+    )
+    raw["request"]["data"]["_csrf"] = raw["request"]["data"]["_csrf"].replace(
+        "REDACTED", "test"
+    )
     path.write_text(json.dumps(raw, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path
 

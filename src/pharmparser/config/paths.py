@@ -59,6 +59,15 @@ def config_path() -> Path:
     return Path.cwd() / CONFIG_FILE_NAME
 
 
+def legacy_config_path() -> Path:
+    """Locate a legacy config beside a frozen executable or in the working directory."""
+    candidates: list[Path] = []
+    if getattr(sys, "frozen", False):
+        candidates.append(Path(sys.executable).resolve().parent / CONFIG_FILE_NAME)
+    candidates.append(config_path())
+    return next((path for path in candidates if path.is_file()), candidates[0])
+
+
 def example_path() -> Path:
     return project_root() / EXAMPLE_FILE_NAME
 

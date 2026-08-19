@@ -15,4 +15,4 @@ export interface Run {
   pinned: boolean; report_path: string | null; warning_count: number;
 }
 export interface Bootstrap { version: string; settings: Settings; credentials: CredentialStatus; active_run_id: string | null; history_size_bytes: number; legacy_config_present: boolean }
-export interface ProgressEvent { sequence: number; run_id: string; kind: string; pharmacy_id?: string; stage: string; message: string; current?: number; total?: number; timestamp: string }
+export interface ProgressEvent { sequence: number; run_id: string; kind: string; pharmacy_id?: string; stage: string; message: string; detail?: string; current?: number; total?: number; timestamp: string }

@@ -168,6 +168,7 @@ async def test_the_configured_form_fields_are_sent(
     assert endpoint.requests[0].form["_csrf"] == "token"
     assert endpoint.requests[0].form["sort"] == "name"
     assert endpoint.requests[0].pharmacy_id == "111"
+    assert endpoint.requests[0].headers["X-Requested-With"] == "XMLHttpRequest"
 
 
 # -- endpoint normalisation ----------------------------------------------------
@@ -211,6 +212,45 @@ async def test_an_expired_session_fails_fast_and_says_so(
     finally:
         await session.close()
     assert len(endpoint.requests) == 1, "a 4xx must not be retried"
+
+
+async def test_an_expired_session_is_refreshed_from_the_public_pharmacy_page(
+    request_config: RequestConfig, entry: PharmacyEntry, endpoint: FakeEndpoint
+) -> None:
+    endpoint.serve("111", PAGE_HTML, price_count=2)
+    endpoint.allow_session_refresh()
+    endpoint.fail_next(400)
+    client, session = await make_client(request_config)
+    try:
+        assert await client.prices_for(entry) == EXPECTED
+    finally:
+        await session.close()
+
+    assert endpoint.session_refreshes == 1
+    assert [request.form["_csrf"] for request in endpoint.requests] == ["token", "fresh-token"]
+
+
+async def test_placeholder_credentials_are_refreshed_before_the_first_post(
+    entry: PharmacyEntry, endpoint: FakeEndpoint
+) -> None:
+    config = RequestConfig(
+        url=HttpUrl(endpoint.url),
+        headers={"Cookie": "REDACTED"},
+        data={"sort": "name", "_csrf": "REDACTED"},
+    )
+    endpoint.serve("111", PAGE_HTML, price_count=2)
+    endpoint.allow_session_refresh()
+    client, session = await make_client(config)
+    try:
+        assert await client.prices_for(entry) == EXPECTED
+    finally:
+        await session.close()
+
+    assert endpoint.session_refreshes == 1
+    assert len(endpoint.requests) == 1
+    assert endpoint.requests[0].form["_csrf"] == "fresh-token"
+    assert endpoint.requests[0].cookie != "REDACTED"
+    assert "lim-result=5000" in endpoint.requests[0].cookie
 
 
 async def test_a_wrong_pharmacy_url_points_at_the_config(

@@ -37,10 +37,12 @@ class LegacyConfigMigrator:
                 )
             )
 
-        csrf = legacy.request.data.get("_csrf", "")
-        if not csrf:
-            raise ValueError("в старой конфигурации отсутствует _csrf")
-        self.credentials.update(Credentials(cookie=legacy.request.cookie, csrf=csrf))
+        credentials = Credentials(
+            cookie=legacy.request.cookie,
+            csrf=legacy.request.data.get("_csrf", ""),
+        )
+        if credentials.is_usable:
+            self.credentials.update(credentials)
 
         current = self.settings.load()
         migrated = current.model_copy(
@@ -51,6 +53,7 @@ class LegacyConfigMigrator:
                 "red": legacy.settings.red,
                 "file_name_template": Path(legacy.settings.file_name).stem,
                 "legacy_migrated": True,
+                "onboarding_complete": True,
             }
         )
         self.settings.save(migrated)

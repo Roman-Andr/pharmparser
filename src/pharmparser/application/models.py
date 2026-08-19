@@ -69,6 +69,7 @@ class ProgressEvent(BaseModel):
     pharmacy_id: str | None = None
     stage: str
     message: str
+    detail: str | None = None
     current: int | None = None
     total: int | None = None
     timestamp: datetime

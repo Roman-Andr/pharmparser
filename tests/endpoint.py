@@ -59,10 +59,12 @@ class FakeEndpoint:
 
     def __init__(self) -> None:
         self.requests: list[ReceivedRequest] = []
+        self.session_refreshes = 0
         self._pages: dict[str, _Page] = {}
         self._default: _Page | None = None
         self._status: int | None = None
         self._transient: list[int] = []
+        self._csrf_token: str | None = None
         self._lock = threading.Lock()
         self._server: ThreadingHTTPServer | None = None
 
@@ -83,6 +85,10 @@ class FakeEndpoint:
     def fail_next(self, status: int, times: int = 1) -> None:
         """Fail the next ``times`` requests, then behave normally again."""
         self._transient.extend([status] * times)
+
+    def allow_session_refresh(self, token: str = "fresh-token") -> None:
+        """Serve a pharmacy page carrying a replacement public CSRF token."""
+        self._csrf_token = token
 
     # -- running ---------------------------------------------------------------
 
@@ -116,6 +122,21 @@ class _Handler(BaseHTTPRequestHandler):
     endpoint: FakeEndpoint
 
     protocol_version = "HTTP/1.1"
+
+    def do_GET(self) -> None:
+        token = self.endpoint._csrf_token
+        if token is None or not self.path.startswith("/pharmacies/"):
+            body = b"not found"
+            self.send_response(404)
+        else:
+            self.endpoint.session_refreshes += 1
+            body = f'<html><head><meta name="csrf-token" content="{token}"></head></html>'.encode()
+            self.send_response(200)
+            self.send_header("Set-Cookie", "regionId=7; Path=/")
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", 0))

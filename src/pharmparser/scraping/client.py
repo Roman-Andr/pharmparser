@@ -8,7 +8,9 @@ from collections.abc import Mapping
 from types import TracebackType
 
 import aiohttp
+from lxml import html as lxml_html
 from pydantic import BaseModel, Field
+from yarl import URL
 
 from ..config import PharmacyEntry, RequestConfig
 from ..domain import ProductPrice
@@ -28,8 +30,8 @@ STALE_SESSION_STATUSES = frozenset({400, 401, 403})
 """What the endpoint answers once the session cookies or the CSRF token expire."""
 
 STALE_SESSION_HINT = (
-    "the session looks expired — refresh the Cookie header and the _csrf value in your "
-    "config from the browser's DevTools (Network tab, any request to the prices page)"
+    "the session looks expired and could not be refreshed automatically — open the pharmacy "
+    "page in a browser and check that tabletka.by is available"
 )
 
 
@@ -74,14 +76,88 @@ class TabletkaClient:
         self._parse_pool = parse_pool or ParsePool(0)
         self._retries = retries
         self._backoff = backoff
+        self._session_generation = 0
+        self._csrf = config.data.get("_csrf", "")
+        self._refresh_lock = asyncio.Lock()
+        placeholders = {"redacted", "<redacted>", "..."}
+        configured_cookie = config.cookie.strip().casefold()
+        self._configured_session_usable = (
+            "=" in config.cookie
+            and configured_cookie not in placeholders
+            and "redacted" not in configured_cookie
+        )
+
+    def _headers(self, limit: int, *, configured_cookie: bool) -> dict[str, str]:
+        excluded = {"cookie", "content-length"}
+        if not configured_cookie:
+            excluded.add("host")
+        headers = {
+            key: value
+            for key, value in self._config.headers.items()
+            if key.casefold() not in excluded
+        }
+        headers.setdefault("Accept", "application/json, text/javascript, */*; q=0.01")
+        headers.setdefault("X-Requested-With", "XMLHttpRequest")
+        if configured_cookie:
+            cookie = self._config.cookie.replace(f"lim-result={PAGE_SIZE}", f"lim-result={limit}")
+            if cookie:
+                headers["Cookie"] = cookie
+        elif self._session_generation > 0:
+            cookies = self._session.cookie_jar.filter_cookies(URL(self._config.endpoint))
+            values = {
+                key: morsel.value
+                for key, morsel in cookies.items()
+                if key.casefold() != "lim-result"
+            }
+            values["lim-result"] = str(limit)
+            headers["Cookie"] = "; ".join(f"{key}={value}" for key, value in values.items())
+        return headers
+
+    async def _refresh_public_session(self, pharmacy_id: str, observed_generation: int) -> None:
+        """Obtain a fresh public CSRF token and regional cookie from a pharmacy page.
+
+        tabletka.by does not require an authenticated account for price lists. Its
+        pharmacy page establishes the short-lived session used by the AJAX endpoint,
+        so stale legacy cookies can be repaired without asking the user for secrets.
+        """
+        async with self._refresh_lock:
+            if self._session_generation != observed_generation:
+                return
+            endpoint = URL(self._config.endpoint)
+            pharmacy_url = endpoint.with_path(f"/pharmacies/{pharmacy_id}/").with_query(None)
+            try:
+                async with self._session.get(
+                    pharmacy_url,
+                    headers=self._headers(PAGE_SIZE, configured_cookie=False),
+                ) as response:
+                    response.raise_for_status()
+                    page = await response.text()
+                root = lxml_html.fromstring(page)
+                tokens = root.xpath('//meta[@name="csrf-token"]/@content')
+                token = str(tokens[0]).strip() if tokens else ""
+                if not token:
+                    raise ValueError("на странице аптеки отсутствует CSRF-токен")
+            except (aiohttp.ClientError, ValueError) as error:
+                raise ScrapeError(f"{STALE_SESSION_HINT}: {error}") from error
+            self._csrf = token
+            self._session_generation += 1
 
     async def _post(self, pharmacy_id: str, page: int, limit: int) -> PricePage:
-        cookie = self._config.cookie.replace(f"lim-result={PAGE_SIZE}", f"lim-result={limit}")
-        headers = {**self._config.headers, "Cookie": cookie}
-        payload = {**self._config.data, "id": pharmacy_id, "page": str(page)}
-
         last_error: Exception | None = None
-        for attempt in range(1, self._retries + 1):
+        attempt = 1
+        refreshed = False
+        if not self._configured_session_usable and self._session_generation == 0:
+            await self._refresh_public_session(pharmacy_id, observed_generation=0)
+            refreshed = True
+        while attempt <= self._retries:
+            generation = self._session_generation
+            headers = self._headers(limit, configured_cookie=generation == 0)
+            payload = {
+                **self._config.data,
+                "_csrf": self._csrf,
+                "id": pharmacy_id,
+                "page": str(page),
+            }
             try:
                 async with self._session.post(
                     self._config.endpoint, data=payload, headers=headers
@@ -89,6 +165,10 @@ class TabletkaClient:
                     response.raise_for_status()
                     return PricePage.model_validate(await response.json(content_type=None))
             except aiohttp.ClientResponseError as error:
+                if error.status in STALE_SESSION_STATUSES and not refreshed:
+                    await self._refresh_public_session(pharmacy_id, generation)
+                    refreshed = True
+                    continue
                 # A 4xx will answer the same way however often it is asked; retrying
                 # only delays the report and hammers the endpoint.
                 if error.status < 500 and error.status not in RETRYABLE_STATUSES:
@@ -105,6 +185,7 @@ class TabletkaClient:
                 pharmacy_id, page, last_error, delay,
             )
             await asyncio.sleep(delay)
+            attempt += 1
 
         raise ScrapeError(
             f"could not fetch prices for pharmacy {pharmacy_id} after {self._retries} attempts: {last_error}"
@@ -144,7 +225,19 @@ class TabletkaClient:
             await self._post(entry.pharmacy_id, page=page, limit=PAGE_SIZE)
             for page in range(2, page_count + 1)
         ]
-        return await self._parse_pool.parse_products([page.data for page in (first, *rest)])
+        prices = await self._parse_pool.parse_products([page.data for page in (first, *rest)])
+        logger.info(
+            "%s: parsed %d structured prices out of %d reported",
+            entry.name,
+            len(prices),
+            first.price_count,
+        )
+        if first.price_count and not prices:
+            raise ScrapeError(
+                f"pharmacy {entry.pharmacy_id}: tabletka.by reported {first.price_count} prices, "
+                "but the parser read none; the site markup may have changed"
+            )
+        return prices
 
 
 class ClientSessionFactory:

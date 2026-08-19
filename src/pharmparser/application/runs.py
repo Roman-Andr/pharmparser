@@ -111,6 +111,7 @@ class RunService:
         async def scrape(entry: PharmacyProfileEntry, fetch: FetchFn) -> tuple[str, bool]:
             self.history.start_attempt(run_id, entry.id, entry.name)
             await self._emit(run_id, "pharmacy", "Загрузка", f"Загрузка: {entry.name}", entry.id)
+            failure_detail = "Неизвестная ошибка"
             try:
                 async with semaphore:
                     prices = await fetch(entry)
@@ -129,16 +130,25 @@ class RunService:
                 self.history.finish_attempt(run_id, entry.id, status="cancelled")
                 raise
             except ProductCollisionError as error:
+                failure_detail = str(error)
                 self.history.finish_attempt(
                     run_id, entry.id, status="failed", error_code="product_collision", error_message=str(error)
                 )
                 self.history.add_warning(run_id, "product_collision", str(error), entry.id)
             except Exception as error:
+                failure_detail = str(error)
                 self.history.finish_attempt(
                     run_id, entry.id, status="failed", error_code=type(error).__name__, error_message=str(error)
                 )
                 self.history.add_warning(run_id, "pharmacy_failed", f"{entry.name}: {error}", entry.id)
-            await self._emit(run_id, "pharmacy", "Ошибка", f"Не удалось загрузить: {entry.name}", entry.id)
+            await self._emit(
+                run_id,
+                "pharmacy",
+                "Ошибка",
+                f"Ошибка: {entry.name}",
+                entry.id,
+                detail=failure_detail,
+            )
             return entry.id, False
 
         try:
@@ -195,11 +205,13 @@ class RunService:
         pharmacy_id: str | None = None,
         current: int | None = None,
         total: int | None = None,
+        detail: str | None = None,
     ) -> None:
         self._sequence[run_id] += 1
         event = ProgressEvent(
             sequence=self._sequence[run_id], run_id=run_id, kind=kind, pharmacy_id=pharmacy_id,
-            stage=stage, message=message, current=current, total=total, timestamp=datetime.now(UTC),
+            stage=stage, message=message, detail=detail, current=current, total=total,
+            timestamp=datetime.now(UTC),
         )
         self._events[run_id].append(event)
         async with self._conditions[run_id]:

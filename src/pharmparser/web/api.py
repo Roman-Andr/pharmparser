@@ -27,7 +27,7 @@ from ..application import (
 )
 from ..application.migration import LegacyConfigMigrator
 from ..application.models import ProfileRecord
-from ..config import RequestConfig, config_path
+from ..config import RequestConfig, legacy_config_path
 from ..domain import may_export
 from ..platform_ import open_file, open_folder
 
@@ -65,7 +65,12 @@ def create_services(
     history_repository = history or HistoryRepository()
 
     def request_config() -> RequestConfig:
-        values = credential_service.get()
+        try:
+            values = credential_service.get()
+        except RuntimeError:
+            # Price pages are public. TabletkaClient will establish a fresh regional
+            # session automatically when no legacy Cookie/CSRF pair is configured.
+            values = Credentials(cookie="", csrf="")
         return RequestConfig(
             headers={"Cookie": values.cookie},
             data={"sort": "name", "sort_type": "asc", "str": "", "_csrf": values.csrf},
@@ -148,7 +153,7 @@ def create_app(
             "credentials": state.credentials.status(),
             "active_run_id": state.runs.active_run_id,
             "history_size_bytes": state.history.size_bytes(),
-            "legacy_config_present": config_path().is_file() and not settings_value.legacy_migrated,
+            "legacy_config_present": legacy_config_path().is_file() and not settings_value.legacy_migrated,
         }
 
     @api.get("/settings")
@@ -195,7 +200,7 @@ def create_app(
 
     @api.post("/migration/legacy")
     async def migrate_legacy(remove_secrets: bool = False):
-        legacy = config_path()
+        legacy = legacy_config_path()
         if not legacy.is_file():
             raise HTTPException(404, "Старая конфигурация не найдена")
         migrator = LegacyConfigMigrator(state.settings, state.credentials)
