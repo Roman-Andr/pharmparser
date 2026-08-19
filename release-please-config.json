@@ -19,6 +19,14 @@
         { "type": "ci", "section": "CI", "hidden": true },
         { "type": "test", "section": "Tests", "hidden": true },
         { "type": "chore", "section": "Chores", "hidden": true }
+      ],
+      "extra-files": [
+        {
+          "comment": "uv records the project's own version too, and CI checks the lockfile is in step",
+          "type": "toml",
+          "path": "uv.lock",
+          "jsonpath": "$.package[?(@.name=='pharmparser')].version"
+        }
       ]
     }
   }
