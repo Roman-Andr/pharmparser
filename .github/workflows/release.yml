@@ -1,0 +1,166 @@
+name: Release
+
+# Versioning is derived from commit messages, not decided by hand.
+#
+# Every push to main updates a standing "Release PR" that carries the next version
+# and the changelog entries earned since the last release: `fix:` bumps the patch,
+# `feat:` the minor, `feat!:`/`BREAKING CHANGE:` the minor too while the project is
+# pre-1.0. Nothing is published until that PR is merged, which is the deliberate
+# "this one is ready" signal the auto-updater follows.
+#
+# Merging it tags the release and builds the binaries here, in this same run.
+# A release created with GITHUB_TOKEN does not trigger `on: push: tags`, so the
+# build has to be chained to release-please rather than left to a tag event.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Build and attach assets to an existing tag (e.g. v0.2.0)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Maintains the Release PR; on the push that merges it, cuts the release.
+  prepare:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      released: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # What to build, whichever way we got here.
+  target:
+    needs: [prepare]
+    if: always() && (needs.prepare.outputs.released == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.pick.outputs.tag }}
+      version: ${{ steps.pick.outputs.version }}
+    steps:
+      - id: pick
+        run: |
+          tag="${{ needs.prepare.outputs.tag || inputs.tag }}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: [target]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows-x64
+            suffix: .exe
+          - os: ubuntu-latest
+            platform: linux-x64
+            suffix: ""
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.target.outputs.tag }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      # A tag that disagrees with pyproject would ship a binary reporting the wrong
+      # version, and the updater would offer the same release forever. release-please
+      # keeps the two in step; this is the net under it.
+      - name: Check the tag against pyproject
+        shell: bash
+        run: |
+          declared=$(uv run python -c 'import pharmparser; print(pharmparser.__version__)')
+          if [ "$declared" != "${{ needs.target.outputs.version }}" ]; then
+            echo "::error::tag ${{ needs.target.outputs.tag }} but the package reports $declared"
+            exit 1
+          fi
+
+      - name: Test
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a uv run pytest; else uv run pytest; fi
+
+      - name: Build
+        run: uv run pyinstaller --noconfirm pharmparser.spec
+
+      # --version proves copy_metadata() worked. Without it the frozen build reports
+      # 0.0.0+unknown, and the updater would never see a release as newer.
+      - name: Smoke-test the packaged binary
+        shell: bash
+        run: |
+          ./dist/pharmparser-cli${{ matrix.suffix }} --help
+          test "$(./dist/pharmparser-cli${{ matrix.suffix }} --version)" \
+            = "pharmparser ${{ needs.target.outputs.version }}"
+
+      - name: Name the assets
+        shell: bash
+        env:
+          VERSION: ${{ needs.target.outputs.version }}
+          PLATFORM: ${{ matrix.platform }}
+          SUFFIX: ${{ matrix.suffix }}
+        run: |
+          mkdir -p release
+          cp "dist/pharmparser$SUFFIX" "release/pharmparser-$VERSION-$PLATFORM$SUFFIX"
+          cp "dist/pharmparser-cli$SUFFIX" "release/pharmparser-cli-$VERSION-$PLATFORM$SUFFIX"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: release-${{ matrix.os }}
+          path: release/
+          retention-days: 7
+
+  publish:
+    needs: [target, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # attach assets to the release
+      id-token: write      # sign the provenance attestation
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release
+
+      # The updater refuses to install anything it cannot check against this file.
+      - name: Checksums
+        working-directory: release
+        run: sha256sum * | tee SHA256SUMS
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: release/pharmparser-*
+
+      # release-please has already created the release; a manual run may not have.
+      - name: Attach the assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.target.outputs.tag }}
+          VERSION: ${{ needs.target.outputs.version }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" --title "PharmParser $VERSION" --generate-notes --verify-tag
+          gh release upload "$TAG" release/* --clobber

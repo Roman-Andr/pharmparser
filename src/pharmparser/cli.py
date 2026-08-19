@@ -1,0 +1,100 @@
+"""Headless entry point: ``pharmparser-cli``.
+
+Runs the whole pipeline — config, scrape, export — without a display, which is
+what lets CI exercise it end to end.
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import sys
+from multiprocessing import freeze_support
+from pathlib import Path
+
+from . import __version__
+from .config import ConfigError
+from .controller import Controller
+from .export import select_exporter
+from .logging_ import configure as configure_logging
+from .scraping import NoPharmaciesError, ScrapeError
+
+logger = logging.getLogger(__name__)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="pharmparser", description=__doc__)
+    parser.add_argument("--config", type=Path, default=None, help="path to config.json")
+    parser.add_argument("--profile", default=None, help="profile name (default: the first one)")
+    parser.add_argument("--output", type=Path, default=None, help="output .xlsx path")
+    parser.add_argument(
+        "--macros",
+        action="store_true",
+        help="also add the VBA sort/filter buttons and produce an .xlsm",
+    )
+    parser.add_argument(
+        "--use-excel",
+        action="store_true",
+        help="build the .xlsm by driving Excel over COM instead of in Python (Windows only)",
+    )
+    parser.add_argument(
+        "--cache",
+        action="store_true",
+        help="reuse this profile's cached prices when present, and cache the result",
+    )
+    parser.add_argument("--version", action="version", version=f"pharmparser {__version__}")
+    parser.add_argument(
+        "--check-update",
+        action="store_true",
+        help="ask GitHub whether a newer release exists, then exit",
+    )
+    parser.add_argument("-v", "--verbose", action="store_true", help="log every request")
+    return parser
+
+
+def _report_update() -> int:
+    """Print whether a newer release exists. Never installs anything."""
+    from .update import RELEASES_PAGE, UpdateError, available_update
+
+    try:
+        release = available_update()
+    except UpdateError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+
+    if release is None:
+        print(f"pharmparser {__version__} is up to date")
+        return 0
+    print(f"pharmparser {release.version} is available (running {__version__})")
+    print(f"  {release.page_url or RELEASES_PAGE}")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    log_file = configure_logging(verbose=args.verbose)
+    if log_file is not None:
+        logger.debug("Logging to %s", log_file)
+
+    if args.check_update:
+        return _report_update()
+
+    try:
+        exporter = select_exporter(macros=args.macros, use_excel=args.use_excel)
+        controller = Controller.load(args.config, exporter=exporter)
+        profile = controller.select_profile(args.profile)
+        logger.info("Parsing profile %r (%d pharmacies)", profile.name, len(profile.scrapable))
+
+        logger.info("Wrote %s", controller.run(profile, use_cache=args.cache, path=args.output))
+    except (ConfigError, NoPharmaciesError, ScrapeError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        return 130
+
+    return 0
+
+
+if __name__ == "__main__":
+    freeze_support()
+    raise SystemExit(main())

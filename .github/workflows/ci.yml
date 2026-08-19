@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.14"]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-groups --python ${{ matrix.python-version }}
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Typecheck
+        run: uv run mypy
+
+      # xvfb gives the GUI smoke tests a display; without one they skip.
+      - name: Test
+        run: xvfb-run -a uv run pytest --cov --cov-report=term-missing
+
+      # Builds the real deliverable — .xlsm, macros and all — on a runner with no
+      # Excel, and publishes it so the macro buttons can be checked by hand.
+      - name: Build a macro-enabled report
+        run: uv run python tools/sample_report.py --output build/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sample-report
+          path: build/
+
+  # The .xlsm export no longer needs Excel — it is built in Python and covered on
+  # Linux by tests/integration/test_macro_export_without_excel.py. This job still
+  # guards the Windows-only half of the dependency set and import graph, and the
+  # opt-in COM path's lazy imports.
+  windows-import:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Test
+        run: uv run pytest
+
+  # The packaged binary has its own import graph — lazy imports and data files that
+  # PyInstaller cannot see by following `import` statements. Running the headless
+  # binary is the cheapest way to know it still starts.
+  package:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Build
+        run: uv run pyinstaller --noconfirm pharmparser.spec
+
+      - name: Smoke-test the headless binary
+        shell: bash
+        run: ./dist/pharmparser-cli --help
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: pharmparser-${{ matrix.os }}
+          path: dist/
+          retention-days: 7

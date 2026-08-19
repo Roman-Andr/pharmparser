@@ -1,13 +1,13 @@
 {
   "profiles": {
     "Profile 1": {
-      "1": "https://tabletka.by/pharmacies/****"
+      "Аптека 1": "https://tabletka.by/pharmacies/0000"
     }
   },
   "settings": {
     "green": "19CF1F",
     "red": "E81737",
-    "title": "Test",
+    "title": "Анализ",
     "fileName": "data.xlsx",
     "colWidth": 50,
     "cellWidth": 15,
@@ -16,12 +16,12 @@
   "request": {
     "url": "https://tabletka.by/ajax-request/reload-pharmacy-price",
     "headers": {
-      // Your headers
-      "Cookie": "your cookies"
+      "Cookie": "PHPSESSID=...; _csrf=...; regionId=...; lim-result=5000",
+      "X-Requested-With": "XMLHttpRequest"
     },
     "data": {
       "sort": "name",
-      "sort_type": "...",
+      "sort_type": "asc",
       "str": "",
       "_csrf": "..."
     }
