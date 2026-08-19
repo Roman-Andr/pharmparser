@@ -53,6 +53,17 @@ Feature work can go either way — straight to `main` for anything self-containe
 `dev` when it should ride along with the dependency bumps. Merging `dev` into `main`
 is what puts any of it into a release.
 
+Name a working branch after the commit type it carries, so the branch says the same
+thing the changelog will:
+
+```
+feat/excel-without-com      fix/stale-cookie-message      perf/lxml-parser
+docs/troubleshooting        ci/branch-naming              refactor/export-layer
+```
+
+Only `main` and `dev` build on push. Everything else is covered by the pull request
+trigger, so a branch gets its checks when it is proposed rather than twice over.
+
 Two things about Dependabot that are GitHub's behaviour, not ours:
 
 * `.github/dependabot.yml` is read from the default branch only, so it lives on
