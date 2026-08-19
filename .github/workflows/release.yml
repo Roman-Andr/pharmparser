@@ -17,16 +17,21 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Build and attach assets to an existing tag (e.g. v0.2.0)"
-        required: true
+        description: "Existing tag to rebuild assets for. Leave empty to just refresh the Release PR."
+        required: false
+        default: ""
 
 permissions:
   contents: read
 
 jobs:
   # Maintains the Release PR; on the push that merges it, cuts the release.
+  # Also reachable by hand with an empty tag. That is the only way to retry when
+  # something outside the workflow stops it: the first run failed on the repository's
+  # "Allow GitHub Actions to create and approve pull requests" setting, and short of
+  # another push to main there was no way to run it again.
   prepare:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || inputs.tag == ''
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -45,7 +50,7 @@ jobs:
   # What to build, whichever way we got here.
   target:
     needs: [prepare]
-    if: always() && (needs.prepare.outputs.released == 'true' || github.event_name == 'workflow_dispatch')
+    if: always() && (needs.prepare.outputs.released == 'true' || inputs.tag != '')
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.pick.outputs.tag }}

@@ -226,8 +226,15 @@ that are not the Release PR publish nothing — CI uploads binaries as workflow
 artifacts for testing instead. Releases are what the auto-updater follows, so they
 stay deliberate.
 
-`workflow_dispatch` on the Release workflow rebuilds and re-attaches assets for an
-existing tag, if a build ever needs redoing.
+`workflow_dispatch` on the Release workflow does two things: with a tag it rebuilds
+and re-attaches that tag's assets, and with the tag left empty it just refreshes the
+Release PR — useful if a run failed for a reason outside the workflow.
+
+> Release-please opens that PR through GitHub Actions, which needs
+> **Settings → Actions → General → Workflow permissions →
+> "Allow GitHub Actions to create and approve pull requests"**. Without it the run
+> fails at the very last step, having already computed the version and pushed the
+> release branch.
 
 ### Updating
 
