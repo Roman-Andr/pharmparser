@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/Roman-Andr/pharmparser/compare/v0.3.1...v0.3.2) (2026-08-19)
+
+
+### Fixes
+
+* keep unique items visible in analysis ([af6cc76](https://github.com/Roman-Andr/pharmparser/commit/af6cc76b516ae11642f7d65907c0d0379bd05c4f))
+
 ## [0.3.1](https://github.com/Roman-Andr/pharmparser/compare/v0.3.0...v0.3.1) (2026-08-19)
 
 
