@@ -266,3 +266,78 @@ def test_clean_superseded_tolerates_a_locked_file(tmp_path: Path, monkeypatch: p
     current.write_bytes(b"new")
     monkeypatch.setattr(Path, "unlink", lambda *a, **k: (_ for _ in ()).throw(OSError("locked")))
     update.clean_superseded(current)  # must not raise
+
+
+# -- the asset name is a contract with the release workflow -------------------
+
+
+@pytest.mark.parametrize(
+    ("platform", "expected"),
+    [
+        ("win32", "pharmparser-1.2.3-windows-x64.exe"),
+        ("linux", "pharmparser-1.2.3-linux-x64"),
+        ("darwin", "pharmparser-1.2.3-macos-x64"),
+    ],
+)
+def test_asset_name_per_platform(platform: str, expected: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update.sys, "platform", platform)
+    assert update.asset_name_for("1.2.3") == expected
+
+
+def test_the_updater_looks_for_the_name_the_release_workflow_builds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A silent-death test.
+
+    The workflow names assets and the updater looks them up by exact name. If either
+    side is renamed the updater simply never finds a release, on every machine, with
+    no error anywhere — so the two are compared here rather than left to agree by
+    memory.
+    """
+    workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+    text = workflow.read_text(encoding="utf-8")
+
+    built = [
+        line.split('"')[-2]
+        for line in text.splitlines()
+        if 'cp "dist/pharmparser$SUFFIX"' in line
+    ]
+    assert built, "release.yml no longer names a GUI asset the way this test expects"
+    template = built[0]  # release/pharmparser-$VERSION-$PLATFORM$SUFFIX
+
+    for platform, suffix, expected_platform in (
+        ("win32", ".exe", "windows-x64"),
+        ("linux", "", "linux-x64"),
+    ):
+        produced = (
+            template.removeprefix("release/")
+            .replace("$VERSION", "1.2.3")
+            .replace("$PLATFORM", expected_platform)
+            .replace("$SUFFIX", suffix)
+        )
+        monkeypatch.setattr(update.sys, "platform", platform)
+        assert update.asset_name_for("1.2.3") == produced, (
+            f"release.yml builds {produced!r} but the updater looks for "
+            f"{update.asset_name_for('1.2.3')!r}"
+        )
+
+
+def test_the_workflow_publishes_the_checksums_the_updater_requires() -> None:
+    workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+    assert update.CHECKSUMS_ASSET in workflow.read_text(encoding="utf-8")
+
+
+# -- restarting ---------------------------------------------------------------
+
+
+def test_restart_launches_the_new_binary_and_leaves(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    launched: list[list[str]] = []
+    monkeypatch.setattr(update.subprocess, "Popen", lambda argv, **kwargs: launched.append(argv))
+    monkeypatch.setattr(update.sys, "argv", ["pharmparser", "--verbose"])
+
+    target = tmp_path / "pharmparser.exe"
+    with pytest.raises(SystemExit) as exit_info:
+        update.restart(target)
+
+    assert exit_info.value.code == 0
+    assert launched == [[str(target), "--verbose"]]
