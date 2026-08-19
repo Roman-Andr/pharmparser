@@ -37,8 +37,13 @@ def test_workbook_saves_and_reloads(tmp_path: Path, settings: ExportSettings, ta
 
     analysis = reloaded[settings.title]
     assert analysis["A1"].value == "АНАЛИЗ ЦЕН И АССОРТИМЕНТА"
-    assert analysis["F5"].value == 1  # unique items no longer also count as cheapest
-    assert analysis["H5"].value == 1
+    assert analysis["D5"].value == 1  # unique items no longer also count as cheapest
+    assert analysis["E5"].value == "Уникальные товары"
+    assert analysis["F5"].value == 1
+    assert analysis["H5"].value == 3.33
+    assert analysis["D5"].number_format == "0"
+    assert analysis["F5"].number_format == "0"
+    assert analysis["H5"].number_format == '0.00 "BYN"'
 
 
 def test_analysis_sheet_is_a_styled_dashboard(tmp_path: Path, settings: ExportSettings, table: PriceTable) -> None:
@@ -97,8 +102,8 @@ def test_single_pharmacy_workbook_is_still_valid(tmp_path: Path, settings: Expor
     assert [cell.value for cell in reloaded["Данные"][3]] == ["Название", "Аптека 1"]
     analysis = reloaded[settings.title]
     assert analysis["D6"].value == 0  # mean competitor assortment
-    assert analysis["F5"].value == 0  # no market comparison is possible
-    assert analysis["H5"].value == 0
+    assert analysis["D5"].value == 0  # no market comparison is possible
+    assert analysis["F5"].value == 0
 
 
 def test_xlsx_exporter_writes_to_the_configured_file_name(

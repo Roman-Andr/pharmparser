@@ -115,7 +115,7 @@ def test_analysis_grid_reports_the_headline_metrics(settings: ExportSettings, ta
         None,
         2,
     ]
-    assert rows[4] == ["Ассортимент", 3, "Средняя цена, BYN", 3.33, "Дешевле всех", 1, "Уникальные товары", 1]
+    assert rows[4] == ["Ассортимент", 3, "Дешевле всех", 1, "Уникальные товары", 1, "Средняя цена, BYN", 3.33]
     assert rows[5] == [
         "Позиций на рынке",
         4,
