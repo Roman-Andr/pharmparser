@@ -26,10 +26,10 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
 
 from lxml import html as lxml_html
 from lxml.etree import XPath, _Element
+from pydantic import BaseModel, ConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +56,9 @@ _ANY_PRICE = XPath(f"//span[{_has_class('price-value')}]")
 _NUMBER = re.compile(r"-?\d+(?:[.,]\d+)?")
 
 
-@dataclass(frozen=True, slots=True)
-class DrugPrice:
+class DrugPrice(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     name: str
     price: float
 

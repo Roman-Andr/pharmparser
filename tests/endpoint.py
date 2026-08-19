@@ -15,16 +15,18 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
+
+from pydantic import BaseModel, ConfigDict
 
 DEFAULT_PHARMACY_HTML = ""
 
 
-@dataclass(frozen=True)
-class ReceivedRequest:
+class ReceivedRequest(BaseModel):
     """One request the endpoint was sent."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     method: str
     path: str
@@ -44,8 +46,9 @@ class ReceivedRequest:
         return self.form.get("page", "")
 
 
-@dataclass
-class _Page:
+class _Page(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     html: str
     price_count: int
 
@@ -70,11 +73,11 @@ class FakeEndpoint:
 
     def serve(self, pharmacy_id: str, html: str, price_count: int = 1) -> None:
         """Answer requests for one pharmacy with ``html``."""
-        self._pages[pharmacy_id] = _Page(html, price_count)
+        self._pages[pharmacy_id] = _Page(html=html, price_count=price_count)
 
     def serve_all(self, html: str, price_count: int = 1) -> None:
         """Answer every pharmacy the same way."""
-        self._default = _Page(html, price_count)
+        self._default = _Page(html=html, price_count=price_count)
 
     def fail(self, status: int = 500) -> None:
         """Answer everything with ``status`` from now on."""

@@ -14,7 +14,8 @@ class Profile:
         self.parent = parent
         self.name = config.name
         self.entries = [
-            Entry(parent, initial_text=entry.name, initial_url=entry.url) for entry in config.pharmacies
+            Entry(parent, self.delete_entry, initial_text=entry.name, initial_url=entry.url)
+            for entry in config.pharmacies
         ]
 
     def to_config(self) -> ProfileConfig:
@@ -28,17 +29,23 @@ class Profile:
 
     def hide(self) -> None:
         for entry in self.entries:
-            entry.destroy()
+            entry.hide()
 
     def display(self) -> None:
         for i, entry in enumerate(self.entries):
             entry.grid(text_row=i + 2, url_row=i + 2, column=0, padx=(5, 0), pady=(5, 5), sticky="nsew")
 
     def add_entry(self) -> None:
-        self.entries.append(Entry(self.parent))
+        self.entries.append(Entry(self.parent, self.delete_entry))
         self.display()
 
-    def delete_entry(self) -> None:
-        if self.entries:
-            self.entries.pop().destroy()
-            self.display()
+    def delete_entry(self, entry: Entry | None = None) -> None:
+        if not self.entries:
+            return
+
+        target = entry or self.entries[-1]
+        if target not in self.entries:
+            return
+        self.entries.remove(target)
+        target.destroy()
+        self.display()

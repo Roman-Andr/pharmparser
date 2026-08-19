@@ -11,7 +11,6 @@ import hashlib
 import json
 import threading
 from collections.abc import Iterator
-from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import ClassVar
@@ -174,7 +173,7 @@ def test_a_release_without_checksums_is_refused(api: str, monkeypatch: pytest.Mo
     release = update.latest_release()
     assert release is not None
     with pytest.raises(UpdateError, match="refusing to install it unverified"):
-        update.download(replace(release, checksums_url=None), tmp_path)
+        update.download(release.model_copy(update={"checksums_url": None}), tmp_path)
 
 
 def test_a_checksum_mismatch_is_refused(api: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

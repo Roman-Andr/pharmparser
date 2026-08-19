@@ -21,11 +21,13 @@ import os
 import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from pharmparser.scraping import ScrapeError
+from pharmparser.ui.entry import DELETE_CONFIRMATION_MS
 
 NEEDS_X11 = sys.platform not in ("win32", "darwin")
 HAS_DISPLAY = not NEEDS_X11 or bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
@@ -85,6 +87,46 @@ def test_add_and_delete_entry(app) -> None:
     app.delete_entry()
     app.update_idletasks()
     assert len(app.current_profile.entries) == 1
+
+
+def test_entry_delete_requires_two_clicks(app, monkeypatch: pytest.MonkeyPatch) -> None:
+    app.add_entry()
+    first, second = app.current_profile.entries
+    cancelled: list[str] = []
+    monkeypatch.setattr(app, "after", lambda delay, callback: "delete-confirmation")
+    monkeypatch.setattr(app, "after_cancel", cancelled.append)
+
+    first.delete_button.invoke()
+
+    assert first.delete_button.cget("text") == "✓"
+    assert app.current_profile.entries == [first, second]
+
+    first.delete_button.invoke()
+
+    assert app.current_profile.entries == [second]
+    assert cancelled == ["delete-confirmation"]
+
+
+def test_entry_delete_confirmation_expires_after_five_seconds(
+    app, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    entry = app.current_profile.entries[0]
+    scheduled: list[tuple[int, Callable[[], None]]] = []
+
+    def schedule(delay: int, callback: Callable[[], None]) -> str:
+        scheduled.append((delay, callback))
+        return "delete-confirmation"
+
+    monkeypatch.setattr(app, "after", schedule)
+
+    entry.request_delete()
+
+    delay, reset = scheduled[0]
+    assert delay == DELETE_CONFIRMATION_MS == 5_000
+    reset()
+    assert entry.delete_button.cget("text") == "✕"
+    assert entry.delete_confirmation_id is None
+    assert app.current_profile.entries == [entry]
 
 
 def test_add_and_delete_profile(app) -> None:
