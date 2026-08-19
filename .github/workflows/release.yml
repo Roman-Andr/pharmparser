@@ -1,54 +1,64 @@
 name: Release
 
-# Tags publish releases; merges to main do not.
+# Versioning is derived from commit messages, not decided by hand.
 #
-# The auto-updater in the app follows the latest non-prerelease tag, so a release
-# is a deliberate "this build is ready" signal. Releasing every merge instead would
-# push work-in-progress binaries at users and make the version number meaningless —
-# CI already uploads a workflow artifact per push for testing those.
+# Every push to main updates a standing "Release PR" that carries the next version
+# and the changelog entries earned since the last release: `fix:` bumps the patch,
+# `feat:` the minor, `feat!:`/`BREAKING CHANGE:` the minor too while the project is
+# pre-1.0. Nothing is published until that PR is merged, which is the deliberate
+# "this one is ready" signal the auto-updater follows.
+#
+# Merging it tags the release and builds the binaries here, in this same run.
+# A release created with GITHUB_TOKEN does not trigger `on: push: tags`, so the
+# build has to be chained to release-please rather than left to a tag event.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to build a release for (e.g. v0.2.0)"
+        description: "Build and attach assets to an existing tag (e.g. v0.2.0)"
         required: true
 
 permissions:
   contents: read
 
 jobs:
-  # Refuse early if the tag and pyproject disagree: shipping v0.2.0 with 0.1.0
-  # compiled inside would make the updater offer the same release forever.
-  version:
+  # Maintains the Release PR; on the push that merges it, cuts the release.
+  prepare:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      released: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # What to build, whichever way we got here.
+  target:
+    needs: [prepare]
+    if: always() && (needs.prepare.outputs.released == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.check.outputs.version }}
-      tag: ${{ steps.check.outputs.tag }}
+      tag: ${{ steps.pick.outputs.tag }}
+      version: ${{ steps.pick.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-
-      - id: check
-        shell: bash
+      - id: pick
         run: |
-          tag="${{ inputs.tag || github.ref_name }}"
-          declared=$(uv run --no-project python -c \
-            'import tomllib,pathlib;print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])')
-          if [ "$tag" != "v$declared" ]; then
-            echo "::error::tag $tag does not match pyproject version $declared (expected v$declared)"
-            exit 1
-          fi
-          echo "version=$declared" >> "$GITHUB_OUTPUT"
+          tag="${{ needs.prepare.outputs.tag || inputs.tag }}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
   build:
-    needs: version
+    needs: [target]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -63,7 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ needs.target.outputs.tag }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -72,6 +82,18 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --all-groups
+
+      # A tag that disagrees with pyproject would ship a binary reporting the wrong
+      # version, and the updater would offer the same release forever. release-please
+      # keeps the two in step; this is the net under it.
+      - name: Check the tag against pyproject
+        shell: bash
+        run: |
+          declared=$(uv run python -c 'import pharmparser; print(pharmparser.__version__)')
+          if [ "$declared" != "${{ needs.target.outputs.version }}" ]; then
+            echo "::error::tag ${{ needs.target.outputs.tag }} but the package reports $declared"
+            exit 1
+          fi
 
       - name: Test
         shell: bash
@@ -87,12 +109,13 @@ jobs:
         shell: bash
         run: |
           ./dist/pharmparser-cli${{ matrix.suffix }} --help
-          test "$(./dist/pharmparser-cli${{ matrix.suffix }} --version)" = "pharmparser ${{ needs.version.outputs.version }}"
+          test "$(./dist/pharmparser-cli${{ matrix.suffix }} --version)" \
+            = "pharmparser ${{ needs.target.outputs.version }}"
 
       - name: Name the assets
         shell: bash
         env:
-          VERSION: ${{ needs.version.outputs.version }}
+          VERSION: ${{ needs.target.outputs.version }}
           PLATFORM: ${{ matrix.platform }}
           SUFFIX: ${{ matrix.suffix }}
         run: |
@@ -107,10 +130,10 @@ jobs:
           retention-days: 7
 
   publish:
-    needs: [version, build]
+    needs: [target, build]
     runs-on: ubuntu-latest
     permissions:
-      contents: write      # create the release
+      contents: write      # attach assets to the release
       id-token: write      # sign the provenance attestation
       attestations: write
     steps:
@@ -130,15 +153,14 @@ jobs:
         with:
           subject-path: release/pharmparser-*
 
-      # gh is preinstalled on the runner, so this needs no third-party action.
-      - name: Publish
+      # release-please has already created the release; a manual run may not have.
+      - name: Attach the assets
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ needs.version.outputs.tag }}
-          VERSION: ${{ needs.version.outputs.version }}
+          TAG: ${{ needs.target.outputs.tag }}
+          VERSION: ${{ needs.target.outputs.version }}
         run: |
-          gh release create "$TAG" release/* \
-            --title "PharmParser $VERSION" \
-            --generate-notes \
-            --verify-tag
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" --title "PharmParser $VERSION" --generate-notes --verify-tag
+          gh release upload "$TAG" release/* --clobber

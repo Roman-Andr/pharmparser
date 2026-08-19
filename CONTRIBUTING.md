@@ -26,6 +26,23 @@ The GUI smoke tests need a display. They skip without one; on a headless machine
 xvfb-run -a uv run pytest
 ```
 
+## Commit messages
+
+[Conventional Commits](https://www.conventionalcommits.org/). This is not a style
+preference: release-please reads the prefixes to decide the next version number and
+to write the changelog, so the prefix on a commit is what ships it.
+
+| prefix | effect on the version | appears in the changelog |
+| --- | --- | --- |
+| `fix:` | patch — `0.2.0` -> `0.2.1` | yes |
+| `feat:` | minor — `0.2.1` -> `0.3.0` | yes |
+| `feat!:`, `BREAKING CHANGE:` | minor while pre-1.0, major after | yes, highlighted |
+| `perf:`, `refactor:`, `docs:`, `build:` | none | yes |
+| `ci:`, `test:`, `chore:` | none | no |
+
+A commit with no recognised prefix releases nothing and says nothing, so it is worth
+getting right. Write the body for someone reading `git log` a year from now.
+
 ## How the code is laid out
 
 The rule that keeps this testable: **the domain layer imports nothing from

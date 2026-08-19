@@ -341,3 +341,36 @@ def test_restart_launches_the_new_binary_and_leaves(monkeypatch: pytest.MonkeyPa
 
     assert exit_info.value.code == 0
     assert launched == [[str(target), "--verbose"]]
+
+
+# -- release-please drives the version the updater compares -------------------
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def test_the_manifest_agrees_with_the_installed_version() -> None:
+    """release-please writes both; if they drift it is bumping from the wrong base."""
+    manifest = json.loads((_repo_root() / ".release-please-manifest.json").read_text())
+    assert manifest["."] == update.current_version()
+
+
+def test_release_please_produces_tags_the_updater_can_read() -> None:
+    """`include-component-in-tag: false` is what keeps tags as plain vX.Y.Z.
+
+    With it on, tags look like `pharmparser-v0.2.0`, which parse_version rejects —
+    the updater would then never offer an update, silently.
+    """
+    config = json.loads((_repo_root() / "release-please-config.json").read_text())
+    package = config["packages"]["."]
+    assert package["include-component-in-tag"] is False
+    assert package["release-type"] == "python"
+    assert update.parse_version(f"v{update.current_version()}") is not None
+
+
+def test_releases_are_not_published_as_prereleases() -> None:
+    """available_update() skips prereleases, so publishing them would ship nothing."""
+    config = json.loads((_repo_root() / "release-please-config.json").read_text())
+    assert config["packages"]["."]["prerelease"] is False
+    assert config["packages"]["."]["draft"] is False

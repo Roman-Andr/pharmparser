@@ -211,18 +211,23 @@ Tagged versions are published to [GitHub Releases](https://github.com/Roman-Andr
 with a Windows and a Linux binary of both the GUI and the CLI, plus a `SHA256SUMS`
 file and a build provenance attestation.
 
-To cut a release, bump `version` in `pyproject.toml`, then tag it to match:
+### Cutting a release
 
-```bash
-git tag v0.2.0 && git push origin v0.2.0
-```
+Version numbers are not chosen by hand. Every push to `main` updates a standing
+**Release PR** carrying the next version and the changelog earned since the last
+release, worked out from the commit prefixes (`fix:` bumps the patch, `feat:` the
+minor — see [CONTRIBUTING](CONTRIBUTING.md#commit-messages)).
 
-The workflow refuses the tag if it disagrees with `pyproject.toml`, so a release can
-never ship a binary that reports a different version than its tag.
+Releasing is merging that PR. That tags the version, writes `CHANGELOG.md`, builds
+the binaries and attaches them.
 
-Merges to `main` do **not** create a release — CI uploads the binaries as workflow
-artifacts instead. Releases are the signal the auto-updater follows, so they are
-deliberate rather than automatic.
+So: nothing to remember, and nothing published until you merge. Merges to `main`
+that are not the Release PR publish nothing — CI uploads binaries as workflow
+artifacts for testing instead. Releases are what the auto-updater follows, so they
+stay deliberate.
+
+`workflow_dispatch` on the Release workflow rebuilds and re-attaches assets for an
+existing tag, if a build ever needs redoing.
 
 ### Updating
 
