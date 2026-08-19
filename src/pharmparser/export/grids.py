@@ -179,12 +179,12 @@ def build_analysis_grid(settings: ExportSettings, table: PriceTable) -> Grid:
             (
                 "Ассортимент",
                 summary.assortment,
-                "Средняя цена, BYN",
-                _round_metric(summary.mean_price),
                 "Дешевле всех",
                 summary.cheapest_everywhere,
                 "Уникальные товары",
                 summary.unique_items,
+                "Средняя цена, BYN",
+                _round_metric(summary.mean_price),
             ),
             (
                 "Позиций на рынке",

@@ -161,9 +161,9 @@ def _style_analysis(grid: Grid, ws: Worksheet) -> None:
         cell.alignment = Alignment(vertical="center", wrap_text=True)
         ws.row_dimensions[row].height = 28
 
-    for cell in ("B5", "F5", "H5", "B6", "F6", "H6", "B9", "D9", "F9", "H9"):
+    for cell in ("B5", "D5", "F5", "B6", "F6", "H6", "B9", "D9", "F9", "H9"):
         ws[cell].number_format = "0"
-    ws["D5"].number_format = '0.00 "BYN"'
+    ws["H5"].number_format = '0.00 "BYN"'
     ws["D6"].number_format = "0.00"
     ws["B10"].number_format = '0.00 "BYN"'
     for cell in ("D10", "F10"):
