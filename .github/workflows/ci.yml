@@ -1,8 +1,11 @@
 name: CI
 
 on:
+  # Only the long-lived branches build on push. Everything else is covered by the
+  # pull_request trigger, and listing feature branches here as well ran the whole
+  # matrix twice for every pull request — eight jobs where four say the same thing.
   push:
-    branches: [main, dev, "claude/**"]
+    branches: [main, dev]
   pull_request:
   workflow_dispatch:
 
