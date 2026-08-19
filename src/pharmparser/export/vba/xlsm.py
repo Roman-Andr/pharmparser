@@ -68,6 +68,9 @@ def _vml(buttons: Sequence[ButtonSpec], shape_id_base: int) -> str:
     shapes = []
     for index, button in enumerate(buttons):
         column, row = button.position()
+        # Deliberately omit MoveWithCells and SizeWithCells.  These controls sit
+        # above the sortable range and must not need a runtime Placement mutation:
+        # some Excel versions reject that write for package-authored VML buttons.
         shapes.append(
             f"""
   <v:shape id="_x0000_s{shape_id_base + index}" type="#_x0000_t201"

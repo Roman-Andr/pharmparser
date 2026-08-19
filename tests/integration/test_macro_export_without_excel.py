@@ -79,14 +79,21 @@ def test_every_button_points_at_a_macro_that_exists(report: Path, tmp_path: Path
     assert referenced <= compiled, f"buttons reference missing macros: {referenced - compiled}"
 
 
-def test_the_compiled_module_is_ascii_and_pins_its_shapes(report: Path, tmp_path: Path) -> None:
+def test_the_compiled_module_does_not_change_legacy_button_placement(
+    report: Path, tmp_path: Path
+) -> None:
+    """VML form buttons can reject ``Shape.Placement`` in Excel with error 80020009.
+
+    Their VML anchors already live above the filtered range and do not opt into
+    moving or sizing with cells, so the generated VBA must not mutate Placement.
+    """
     blob = tmp_path / "vbaProject.bin"
     blob.write_bytes(zipfile.ZipFile(report).read(VBA_PART))
     for _, _, module, code in VBA_Parser(str(blob)).extract_macros():
         if "PharmParser" in module:
             assert code.isascii(), "module streams are stored in the project code page"
-            assert "Private Sub PharmParserPinShapes()" in code
-            assert code.count("PharmParserPinShapes") == 13, "helper plus one call per macro"
+            assert ".Placement" not in code
+            assert "PharmParserPinShapes" not in code
 
 
 def test_the_plain_sheet_data_survives_packaging(report: Path, settings: ExportSettings) -> None:

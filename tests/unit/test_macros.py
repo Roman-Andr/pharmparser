@@ -87,9 +87,3 @@ def test_macro_names_are_ascii_even_for_russian_sheets() -> None:
 )
 def test_macro_identifier_transliterates(sheet: str, expected: str) -> None:
     assert macro_identifier(sheet) == expected
-
-
-def test_a_prologue_is_rendered_inside_the_sub() -> None:
-    macro = RemoveFiltersMacro(6, "Data")
-    macro.prologue = "PIN_MARKER"
-    assert "PIN_MARKER" in macro.code
