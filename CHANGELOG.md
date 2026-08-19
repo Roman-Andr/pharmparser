@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/Roman-Andr/pharmparser/compare/v0.2.0...v0.2.1) (2026-08-19)
+
+
+### Fixes
+
+* keep uv.lock in step with the version release-please writes ([#5](https://github.com/Roman-Andr/pharmparser/issues/5)) ([84619c3](https://github.com/Roman-Andr/pharmparser/commit/84619c3b21791a0aed5be5fc2318e79832c447c2))
+
 ## [0.2.0](https://github.com/Roman-Andr/pharmparser/compare/v0.1.0...v0.2.0) (2026-08-19)
 
 
