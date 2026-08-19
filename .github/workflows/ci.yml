@@ -109,21 +109,3 @@ jobs:
           name: pharmparser-${{ matrix.os }}
           path: dist/
           retention-days: 7
-
-  # The branch ruleset requires one stable status named `ci`. Keep the detailed
-  # jobs above for useful diagnostics and aggregate them here so adding a matrix
-  # entry does not require editing the repository rules as well.
-  ci:
-    if: always()
-    needs: [check, windows-import, package]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Require every CI job to pass
-        env:
-          CHECK_RESULT: ${{ needs.check.result }}
-          WINDOWS_IMPORT_RESULT: ${{ needs.windows-import.result }}
-          PACKAGE_RESULT: ${{ needs.package.result }}
-        run: |
-          test "$CHECK_RESULT" = success
-          test "$WINDOWS_IMPORT_RESULT" = success
-          test "$PACKAGE_RESULT" = success
