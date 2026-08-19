@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/Roman-Andr/pharmparser/compare/v0.3.2...v0.4.0) (2026-08-19)
+
+
+### Features
+
+* confirm pharmacy deletion and migrate models ([c462e93](https://github.com/Roman-Andr/pharmparser/commit/c462e935514f45f60c6b377d33198124fbf84ce6))
+
 ## [0.3.2](https://github.com/Roman-Andr/pharmparser/compare/v0.3.1...v0.3.2) (2026-08-19)
 
 
