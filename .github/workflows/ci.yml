@@ -1,8 +1,11 @@
 name: CI
 
 on:
+  # Only the long-lived branches build on push. Everything else is covered by the
+  # pull_request trigger, and listing feature branches here as well ran the whole
+  # matrix twice for every pull request — eight jobs where four say the same thing.
   push:
-    branches: [main, "claude/**"]
+    branches: [main, dev]
   pull_request:
   workflow_dispatch:
 
@@ -27,6 +30,12 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --all-groups --python ${{ matrix.python-version }}
+
+      # `uv sync` re-locks in place, so a stale uv.lock passes unnoticed. It goes
+      # stale on every release: release-please bumps the version in pyproject.toml,
+      # and the project's own entry in the lockfile has to follow.
+      - name: Lockfile is in step with pyproject
+        run: uv lock --check
 
       - name: Lint
         run: uv run ruff check .
