@@ -107,26 +107,17 @@ def comparison_rows(table: PriceTable, difference: DifferenceFn) -> list[Compari
 
 
 def count_cheapest_everywhere(table: PriceTable) -> int:
-    """Items the reference stocks strictly below every competitor that also stocks them.
+    """Items that pass ``Apply Filters`` on every displayed difference column.
 
-    Competitors that do not stock the item are ignored rather than counted as
-    infinitely cheap — that inversion was bug B2, which silently forced this metric
-    to 0 whenever any competitor lacked the item.
+    Excel combines those filters with AND, so a missing competitor price excludes
+    the row. The comparison uses the rounded values written to the workbook to keep
+    the dashboard count identical to the visible filtered result.
     """
-    reference = table.reference
-    total = 0
-    for item, price in table.prices_for(reference).items():
-        competitor_prices = [
-            competitor_price
-            for competitor in table.competitors
-            if (competitor_price := table.price_of(competitor, item)) is not None
-        ]
-        # ``all([])`` is true, but an item with no competing offer is unique,
-        # not a price victory. Keeping these metrics mutually exclusive makes
-        # the dashboard totals intelligible.
-        if competitor_prices and all(price < competitor_price for competitor_price in competitor_prices):
-            total += 1
-    return total
+    return sum(
+        1
+        for row in comparison_rows(table, absolute_difference)
+        if row.differences and all(difference is not None and difference > 0 for difference in row.differences)
+    )
 
 
 def count_unique_items(table: PriceTable) -> int:

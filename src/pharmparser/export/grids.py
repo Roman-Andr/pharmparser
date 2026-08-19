@@ -183,7 +183,7 @@ def build_analysis_grid(settings: ExportSettings, table: PriceTable) -> Grid:
                 _round_metric(summary.mean_price),
                 "Дешевле всех",
                 summary.cheapest_everywhere,
-                "Только у нас",
+                "Уникальные товары",
                 summary.unique_items,
             ),
             (
@@ -233,8 +233,8 @@ def build_analysis_grid(settings: ExportSettings, table: PriceTable) -> Grid:
             *breakdown,
             (),
             (
-                "«Дешевле всех» учитывает только позиции хотя бы с одной ценой конкурента; "
-                "уникальные позиции считаются отдельно.",
+                "«Дешевле всех» совпадает с Apply Filters: цена есть у всех конкурентов и каждая разница > 0. "
+                "«Уникальные товары» есть только у базовой аптеки.",
             ),
         ),
         width=ANALYSIS_COLUMNS,

@@ -55,13 +55,33 @@ def test_differences_are_rounded_to_two_decimals() -> None:
     assert row.differences == (33.33,)
 
 
-def test_cheapest_everywhere_ignores_missing_offers_but_not_every_offer(table: PriceTable) -> None:
-    """An exclusive item is not also presented as a price win.
+def test_cheapest_everywhere_requires_every_competitor_offer(table: PriceTable) -> None:
+    """The metric follows the AND filters applied to every difference column.
 
     Аспирин (5.00 vs 6.50 and 7.00) is cheapest. Цитрамон has no comparable
     competitor price and belongs only in the separate unique-items metric.
     """
     assert count_cheapest_everywhere(table) == 1
+
+
+def test_cheapest_everywhere_matches_apply_filters_result() -> None:
+    table = PriceTable.build(
+        [
+            (Pharmacy("1", "A"), {"all-positive": 5.0, "missing-offer": 5.0, "rounds-to-zero": 5.0}),
+            (Pharmacy("2", "B"), {"all-positive": 6.0, "missing-offer": 6.0, "rounds-to-zero": 5.004}),
+            (Pharmacy("3", "C"), {"all-positive": 7.0, "rounds-to-zero": 6.0}),
+        ]
+    )
+
+    rows = comparison_rows(table, absolute_difference)
+    apply_filters_result = sum(
+        1
+        for row in rows
+        if row.differences and all(difference is not None and difference > 0 for difference in row.differences)
+    )
+
+    assert apply_filters_result == 1
+    assert count_cheapest_everywhere(table) == apply_filters_result
 
 
 def test_cheapest_everywhere_requires_a_strict_win() -> None:
