@@ -1,17 +1,18 @@
 """Core domain model.
 
-Deliberately free of I/O and of every framework the app uses: no openpyxl, no
-customtkinter, no COM, no network. Everything here is directly unit-testable.
+Deliberately free of I/O and presentation concerns: no openpyxl, no customtkinter,
+no COM, no network. Everything here is directly unit-testable.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from typing import Self
+
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
-@dataclass(frozen=True, slots=True)
-class Pharmacy:
+class Pharmacy(BaseModel):
     """A pharmacy whose prices are being compared.
 
     ``id`` is the stable identity (the numeric id from the tabletka.by URL) and is
@@ -20,23 +21,27 @@ class Pharmacy:
     conflating the two misaligned the exported sheet.
     """
 
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     id: str
     name: str
 
 
-@dataclass(frozen=True, slots=True)
-class PriceTable:
+class PriceTable(BaseModel):
     """Prices for a set of pharmacies.
 
     The first pharmacy is the *reference*: every comparison in
     :mod:`pharmparser.domain.analysis` is expressed relative to it.
     """
 
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     pharmacies: tuple[Pharmacy, ...]
     prices: Mapping[str, Mapping[str, float]]
     """Pharmacy id -> item name -> price."""
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def _validate_pharmacy_ids(self) -> Self:
         if not self.pharmacies:
             raise ValueError("a price table needs at least one pharmacy")
         ids = [pharmacy.id for pharmacy in self.pharmacies]
@@ -46,6 +51,7 @@ class PriceTable:
         missing = [pid for pid in ids if pid not in self.prices]
         if missing:
             raise ValueError(f"no prices supplied for pharmacy ids: {missing}")
+        return self
 
     @classmethod
     def build(cls, entries: Iterable[tuple[Pharmacy, Mapping[str, float]]]) -> PriceTable:
@@ -54,7 +60,7 @@ class PriceTable:
         for pharmacy, item_prices in entries:
             pharmacies.append(pharmacy)
             prices[pharmacy.id] = dict(item_prices)
-        return cls(tuple(pharmacies), prices)
+        return cls(pharmacies=tuple(pharmacies), prices=prices)
 
     @classmethod
     def from_mapping(cls, names: Sequence[str], data: Mapping[str, Mapping[str, float]]) -> PriceTable:

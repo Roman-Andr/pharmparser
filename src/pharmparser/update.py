@@ -27,9 +27,10 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
-from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
+
+from pydantic import BaseModel, ConfigDict
 
 from . import __version__
 
@@ -57,9 +58,10 @@ class UpdateError(RuntimeError):
     """An update could not be checked for, downloaded, or installed."""
 
 
-@dataclass(frozen=True, slots=True)
-class Release:
+class Release(BaseModel):
     """A published release and the binary it offers for this platform."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     version: str
     tag: str

@@ -82,7 +82,10 @@ def _package_macros(plain: Path, built: Path, grids, sheets) -> Path:
     titles = [grid.title for grid in grids]
     project = build_project({MODULE_NAME: module_source(sheets)}, titles)
     specs = {
-        title: [ButtonSpec(button.cell_address, button.caption, button.macro.name) for button in buttons]
+        title: [
+            ButtonSpec(cell=button.cell_address, caption=button.caption, macro=button.macro.name)
+            for button in buttons
+        ]
         for title, buttons in sheets.items()
     }
     return package(plain, built, project, specs, titles)

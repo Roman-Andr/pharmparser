@@ -8,9 +8,10 @@ Excel's, capitals included, because that is what the code under test calls.
 from __future__ import annotations
 
 import shutil
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class FakeCharacters:
@@ -36,27 +37,30 @@ class FakeTextFrame:
         return FakeCharacters(self)
 
 
-@dataclass
-class FakeColour:
+class FakeColour(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     RGB: int | None = None
 
 
-@dataclass
-class FakeFill:
-    BackColor: FakeColour = field(default_factory=FakeColour)
-    ForeColor: FakeColour = field(default_factory=FakeColour)
+class FakeFill(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    BackColor: FakeColour = Field(default_factory=FakeColour)
+    ForeColor: FakeColour = Field(default_factory=FakeColour)
 
 
-@dataclass
-class FakeShape:
+class FakeShape(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
     Name: str
     Left: float
     Top: float
     Width: float
     Height: float
     OnAction: str | None = None
-    TextFrame: FakeTextFrame = field(default_factory=FakeTextFrame)
-    Fill: FakeFill = field(default_factory=FakeFill)
+    TextFrame: FakeTextFrame = Field(default_factory=FakeTextFrame)
+    Fill: FakeFill = Field(default_factory=FakeFill)
 
 
 class FakeShapes:
@@ -64,13 +68,16 @@ class FakeShapes:
         self.shapes: list[FakeShape] = []
 
     def AddShape(self, _kind: int, left: float, top: float, width: float, height: float) -> FakeShape:
-        shape = FakeShape(f"Shape {len(self.shapes) + 1}", left, top, width, height)
+        shape = FakeShape(
+            Name=f"Shape {len(self.shapes) + 1}", Left=left, Top=top, Width=width, Height=height
+        )
         self.shapes.append(shape)
         return shape
 
 
-@dataclass
-class FakeCell:
+class FakeCell(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     Left: float
     Top: float
     Width: float

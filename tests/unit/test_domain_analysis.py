@@ -50,7 +50,9 @@ def test_missing_prices_give_an_undefined_difference(table: PriceTable) -> None:
 
 
 def test_differences_are_rounded_to_two_decimals() -> None:
-    table = PriceTable.build([(Pharmacy("1", "A"), {"x": 3.00}), (Pharmacy("2", "B"), {"x": 4.00})])
+    table = PriceTable.build(
+        [(Pharmacy(id="1", name="A"), {"x": 3.00}), (Pharmacy(id="2", name="B"), {"x": 4.00})]
+    )
     (row,) = comparison_rows(table, percentage_difference)
     assert row.differences == (33.33,)
 
@@ -67,9 +69,15 @@ def test_cheapest_everywhere_requires_every_competitor_offer(table: PriceTable) 
 def test_cheapest_everywhere_matches_apply_filters_result() -> None:
     table = PriceTable.build(
         [
-            (Pharmacy("1", "A"), {"all-positive": 5.0, "missing-offer": 5.0, "rounds-to-zero": 5.0}),
-            (Pharmacy("2", "B"), {"all-positive": 6.0, "missing-offer": 6.0, "rounds-to-zero": 5.004}),
-            (Pharmacy("3", "C"), {"all-positive": 7.0, "rounds-to-zero": 6.0}),
+            (
+                Pharmacy(id="1", name="A"),
+                {"all-positive": 5.0, "missing-offer": 5.0, "rounds-to-zero": 5.0},
+            ),
+            (
+                Pharmacy(id="2", name="B"),
+                {"all-positive": 6.0, "missing-offer": 6.0, "rounds-to-zero": 5.004},
+            ),
+            (Pharmacy(id="3", name="C"), {"all-positive": 7.0, "rounds-to-zero": 6.0}),
         ]
     )
 
@@ -85,7 +93,9 @@ def test_cheapest_everywhere_matches_apply_filters_result() -> None:
 
 
 def test_cheapest_everywhere_requires_a_strict_win() -> None:
-    table = PriceTable.build([(Pharmacy("1", "A"), {"x": 5.0}), (Pharmacy("2", "B"), {"x": 5.0})])
+    table = PriceTable.build(
+        [(Pharmacy(id="1", name="A"), {"x": 5.0}), (Pharmacy(id="2", name="B"), {"x": 5.0})]
+    )
     assert count_cheapest_everywhere(table) == 0
 
 
@@ -94,7 +104,7 @@ def test_unique_items_counts_only_the_reference(table: PriceTable) -> None:
 
 
 def test_a_single_pharmacy_cannot_claim_market_wins_or_unique_items() -> None:
-    table = PriceTable.build([(Pharmacy("1", "A"), {"x": 1.0})])
+    table = PriceTable.build([(Pharmacy(id="1", name="A"), {"x": 1.0})])
 
     assert count_cheapest_everywhere(table) == 0
     assert count_unique_items(table) == 0
@@ -155,8 +165,8 @@ def test_summary_competitor_breakdown(table: PriceTable) -> None:
 def test_equal_prices_are_a_separate_comparison_outcome() -> None:
     table = PriceTable.build(
         [
-            (Pharmacy("1", "A"), {"same": 5.0, "only-a": 2.0}),
-            (Pharmacy("2", "B"), {"same": 5.0, "only-b": 7.0}),
+            (Pharmacy(id="1", name="A"), {"same": 5.0, "only-a": 2.0}),
+            (Pharmacy(id="2", name="B"), {"same": 5.0, "only-b": 7.0}),
         ]
     )
 
@@ -170,7 +180,7 @@ def test_equal_prices_are_a_separate_comparison_outcome() -> None:
 
 def test_summary_survives_a_single_pharmacy() -> None:
     """statistics.mean raises on an empty sequence where numpy returned nan."""
-    table = PriceTable.build([(Pharmacy("1", "A"), {"x": 1.0})])
+    table = PriceTable.build([(Pharmacy(id="1", name="A"), {"x": 1.0})])
     summary = summarise(table)
     assert summary.mean_competitor_assortment == 0
     assert summary.competitors == ()

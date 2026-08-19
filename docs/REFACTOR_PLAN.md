@@ -369,7 +369,7 @@ project that knows openpyxl; `export/vba/` holds the Windows-only macro buttons,
 `MacroExporter`, so the CLI and the UI pick a backend with `select_exporter()` instead of
 each branching on `supports_excel_macros()` themselves.
 
-A `Grid` is a frozen dataclass of rows plus layout — column widths by index, the header
+A `Grid` is a frozen Pydantic model of rows plus layout — column widths by index, the header
 row, the difference columns, the two conditional-format colours — which is what makes the
 report assertable as data. `tests/fixtures/golden_grids.json` pins all three sheets;
 a diff there is the diff a user would see in Excel.
@@ -533,7 +533,8 @@ Everything was moved to its latest release, which surfaced three problems worth 
 4. **Python 3.14** is the target runtime (added 2026-08-18). This forced an `lxml` floor of 6.0.1,
    the first release shipping cp314 wheels.
 5. **pydantic and pydantic-settings** are adopted for configuration (added 2026-08-18), which
-   pulled phase 4 forward ahead of phase 3.
+   pulled phase 4 forward ahead of phase 3. As of 2026-08-19, every structured production and
+   test model uses Pydantic; the project no longer uses `dataclasses`.
 6. **The interface stays Russian-only.** No message catalogue, no localisation layer: the sheet
    labels stay as Russian literals in `export/grids.py`, where they read as the report's own
    wording rather than as keys pointing somewhere else.

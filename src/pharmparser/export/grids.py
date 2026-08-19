@@ -11,12 +11,13 @@ place that knows about Excel.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..config import DATA_SHEET, PERCENT_SHEET, ExportSettings
 from ..domain import DifferenceFn, PriceTable, absolute_difference, comparison_rows, percentage_difference, summarise
 
-Cell = str | float | None
+Cell = str | int | float | None
 """One cell's value. ``None`` is written as a genuinely empty cell."""
 
 HEADER_OFFSET = 2
@@ -41,9 +42,10 @@ ANALYSIS_COLUMNS = 9
 """Columns used by the redesigned analysis dashboard."""
 
 
-@dataclass(frozen=True, slots=True)
-class AnalysisPresentation:
+class AnalysisPresentation(BaseModel):
     """Semantic layout metadata for the styled analysis dashboard."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     merged_ranges: tuple[tuple[int, int, int, int], ...]
     section_rows: tuple[int, ...]
@@ -54,15 +56,16 @@ class AnalysisPresentation:
     note_rows: tuple[int, ...]
 
 
-@dataclass(frozen=True, slots=True)
-class Grid:
+class Grid(BaseModel):
     """A whole sheet: its cells plus how they should be laid out."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     title: str
     rows: tuple[tuple[Cell, ...], ...]
     width: int
     """Number of columns actually carrying content."""
-    column_widths: Mapping[int, float] = field(default_factory=dict)
+    column_widths: Mapping[int, float] = Field(default_factory=dict)
     """Explicit widths by 1-based column index; every other column gets the default."""
     default_column_width: float = 15
     header_row: int | None = None

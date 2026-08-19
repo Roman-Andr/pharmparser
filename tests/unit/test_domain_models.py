@@ -26,7 +26,9 @@ def test_item_names_are_the_union_sorted_case_insensitively(table: PriceTable) -
 
 
 def test_item_names_sorting_ignores_case() -> None:
-    table = PriceTable.build([(Pharmacy("1", "A"), {"banana": 1.0, "Apple": 2.0, "cherry": 3.0})])
+    table = PriceTable.build(
+        [(Pharmacy(id="1", name="A"), {"banana": 1.0, "Apple": 2.0, "cherry": 3.0})]
+    )
     assert table.item_names() == ["Apple", "banana", "cherry"]
 
 
@@ -42,13 +44,18 @@ def test_empty_table_is_rejected() -> None:
 
 def test_duplicate_pharmacy_ids_are_rejected() -> None:
     with pytest.raises(ValueError, match="duplicate pharmacy ids"):
-        PriceTable.build([(Pharmacy("1", "A"), {}), (Pharmacy("1", "B"), {})])
+        PriceTable.build(
+            [(Pharmacy(id="1", name="A"), {}), (Pharmacy(id="1", name="B"), {})]
+        )
 
 
 def test_pharmacies_may_share_a_display_name_when_ids_differ() -> None:
     """B14: identity is the id, so two branches of one chain are representable."""
     table = PriceTable.build(
-        [(Pharmacy("1", "Аптека"), {"Аспирин": 5.0}), (Pharmacy("2", "Аптека"), {"Аспирин": 6.0})]
+        [
+            (Pharmacy(id="1", name="Аптека"), {"Аспирин": 5.0}),
+            (Pharmacy(id="2", name="Аптека"), {"Аспирин": 6.0}),
+        ]
     )
     assert table.assortment(table.pharmacies[0]) == 1
     assert table.price_of(table.pharmacies[1], "Аспирин") == 6.0
@@ -67,4 +74,4 @@ def test_legacy_adapter_tolerates_a_pharmacy_with_no_prices() -> None:
 
 def test_pharmacy_without_a_prices_entry_is_rejected() -> None:
     with pytest.raises(ValueError, match="no prices supplied"):
-        PriceTable(pharmacies=(Pharmacy("1", "A"),), prices={})
+        PriceTable(pharmacies=(Pharmacy(id="1", name="A"),), prices={})

@@ -96,7 +96,9 @@ def test_single_pharmacy_workbook_is_still_valid(tmp_path: Path, settings: Expor
     """A profile with one pharmacy has no difference columns at all."""
     from pharmparser.domain import Pharmacy
 
-    table = PriceTable.build([(Pharmacy("1", "Аптека 1"), {"Аспирин": 5.0})])
+    table = PriceTable.build(
+        [(Pharmacy(id="1", name="Аптека 1"), {"Аспирин": 5.0})]
+    )
     reloaded = load_workbook(write_workbook(settings, table, tmp_path / "single.xlsx"))
 
     assert [cell.value for cell in reloaded["Данные"][3]] == ["Название", "Аптека 1"]
