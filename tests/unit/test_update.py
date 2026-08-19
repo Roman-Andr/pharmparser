@@ -331,16 +331,24 @@ def test_the_workflow_publishes_the_checksums_the_updater_requires() -> None:
 
 
 def test_restart_launches_the_new_binary_and_leaves(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    launched: list[list[str]] = []
-    monkeypatch.setattr(update.subprocess, "Popen", lambda argv, **kwargs: launched.append(argv))
+    launched: list[tuple[list[str], dict[str, object]]] = []
+    monkeypatch.setattr(update.subprocess, "Popen", lambda argv, **kwargs: launched.append((argv, kwargs)))
     monkeypatch.setattr(update.sys, "argv", ["pharmparser", "--verbose"])
+    monkeypatch.setenv("PHARMPARSER_RESTART_TEST", "preserved")
 
     target = tmp_path / "pharmparser.exe"
     with pytest.raises(SystemExit) as exit_info:
         update.restart(target)
 
     assert exit_info.value.code == 0
-    assert launched == [[str(target), "--verbose"]]
+    assert len(launched) == 1
+    argv, kwargs = launched[0]
+    assert argv == [str(target), "--verbose"]
+    assert kwargs["close_fds"] is True
+    environment = kwargs["env"]
+    assert isinstance(environment, dict)
+    assert environment["PHARMPARSER_RESTART_TEST"] == "preserved"
+    assert environment["PYINSTALLER_RESET_ENVIRONMENT"] == "1"
 
 
 # -- release-please drives the version the updater compares -------------------

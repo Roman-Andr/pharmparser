@@ -238,5 +238,11 @@ def clean_superseded(executable: Path | None = None) -> None:
 def restart(executable: Path | None = None) -> None:
     """Launch the freshly installed binary and leave."""
     target = executable or executable_path()
-    subprocess.Popen([str(target), *sys.argv[1:]], close_fds=True)
+    # A restarted onefile application must not inherit the current PyInstaller
+    # bootloader state. Since PyInstaller 6.9, a process launched from the same
+    # executable path is otherwise treated as a worker that reuses its parent's
+    # unpacked files. That is invalid after an in-place update, where the path now
+    # contains a different executable, and the bootloader aborts the restart.
+    environment = {**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"}
+    subprocess.Popen([str(target), *sys.argv[1:]], close_fds=True, env=environment)
     sys.exit(0)
