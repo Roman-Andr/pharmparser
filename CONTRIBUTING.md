@@ -43,6 +43,30 @@ to write the changelog, so the prefix on a commit is what ships it.
 A commit with no recognised prefix releases nothing and says nothing, so it is worth
 getting right. Write the body for someone reading `git log` a year from now.
 
+## Merging
+
+The merge strategy decides what release-please sees, so it is a release decision
+rather than a taste one: only commits that land on `main` are read, and a squash
+collapses a whole branch into one.
+
+**Rebase and merge** when the branch's commits are already one-idea-each with proper
+prefixes. Every one of them then earns its own changelog line, and the highest type
+among them sets the version bump.
+
+**Squash and merge** when the branch has fixup and work-in-progress commits worth
+hiding. Then the squash message is the *only* thing released, so it has to be a
+proper Conventional Commit itself — GitHub defaults the subject to the PR title, so
+the PR title becomes the release note. A title like "updates" releases nothing and
+says nothing. If squashing becomes the norm here, add a PR-title lint
+(`amannn/action-semantic-pull-request`) so that failure is caught in review rather
+than discovered at release time.
+
+Squashing does not fold the branch's commits into several changelog entries: they
+end up in the squash commit's *body*, and release-please reads one type per commit,
+from the subject.
+
+The Release PR itself is a single commit either way, so merge it however you like.
+
 ## How the code is laid out
 
 The rule that keeps this testable: **the domain layer imports nothing from
