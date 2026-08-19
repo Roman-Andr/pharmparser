@@ -38,9 +38,20 @@ jobs:
       - name: Test
         run: xvfb-run -a uv run pytest --cov --cov-report=term-missing
 
-  # The .xlsm export drives Excel over COM, so it can only be exercised on Windows.
-  # Everything else is expected to pass on Linux; this job guards the Windows-only
-  # half of the dependency set and import graph.
+      # Builds the real deliverable — .xlsm, macros and all — on a runner with no
+      # Excel, and publishes it so the macro buttons can be checked by hand.
+      - name: Build a macro-enabled report
+        run: uv run python tools/sample_report.py --output build/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sample-report
+          path: build/
+
+  # The .xlsm export no longer needs Excel — it is built in Python and covered on
+  # Linux by tests/integration/test_macro_export_without_excel.py. This job still
+  # guards the Windows-only half of the dependency set and import graph, and the
+  # opt-in COM path's lazy imports.
   windows-import:
     runs-on: windows-latest
     steps:

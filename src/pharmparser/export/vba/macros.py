@@ -26,6 +26,27 @@ FIRST_DIFFERENCE_COLUMN = 4
 FIRST_DATA_ROW = 3
 LAST_DATA_ROW = 100000
 
+_TRANSLITERATION = str.maketrans({
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e", "ж": "zh",
+    "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m", "н": "n", "о": "o",
+    "п": "p", "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f", "х": "h", "ц": "ts",
+    "ч": "ch", "ш": "sh", "щ": "sch", "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu",
+    "я": "ya",
+})
+
+
+def macro_identifier(name: str) -> str:
+    """An ASCII, VBA-legal fragment of a sheet name, for use in a ``Sub`` name.
+
+    Module streams are stored in the project code page, so a Cyrillic ``Sub`` name
+    comes back as mojibake — and the sheet titles here are Russian. Transliterating
+    keeps the generated names readable without leaving ASCII.
+    """
+    lowered = name.casefold().translate(_TRANSLITERATION)
+    cleaned = "".join(char if char.isascii() and char.isalnum() else "_" for char in lowered)
+    cleaned = "_".join(part for part in cleaned.split("_") if part)
+    return cleaned or "Sheet"
+
 
 class Macro(ABC):
     """One ``Sub`` in the generated module."""
@@ -35,6 +56,11 @@ class Macro(ABC):
         self.end_column = end_column
         self.data_range = f"A{FIRST_DATA_ROW}:{get_column_letter(end_column)}{LAST_DATA_ROW}"
         self.position_codes: list[tuple[str, str]] = []
+        self.prologue = ""
+        """A statement run first, before the saved geometry is read.
+
+        The cross-platform packer uses it to pin every shape in place, which the
+        COM path achieves with :attr:`position_codes` instead."""
 
     def add_position_code(self, save: str, restore: str) -> None:
         """Register a button's geometry to be saved and restored around this macro."""
@@ -57,6 +83,7 @@ class Macro(ABC):
         return f"""
         Sub {self.name}()
             Application.ScreenUpdating = False
+            {self.prologue}
             {saves}
             {self.body}
             {restores}
@@ -71,7 +98,7 @@ class SortMacro(Macro):
     def __init__(self, column: str, end_column: int, sort_order: SortOrder, sheet_name: str) -> None:
         self.column = column
         self.sort_order = sort_order
-        super().__init__(f"Sort{sort_order.name}{column}_{sheet_name}", end_column)
+        super().__init__(f"Sort{sort_order.name}{column}_{macro_identifier(sheet_name)}", end_column)
 
     @property
     def body(self) -> str:
@@ -86,7 +113,7 @@ class RemoveFiltersMacro(Macro):
     """Clear every difference-column filter and restore the original item order."""
 
     def __init__(self, end_column: int, sheet_name: str) -> None:
-        super().__init__(f"RemoveFilters_{sheet_name}", end_column)
+        super().__init__(f"RemoveFilters_{macro_identifier(sheet_name)}", end_column)
 
     @property
     def body(self) -> str:
@@ -111,7 +138,7 @@ class ApplyFiltersMacro(Macro):
 
     def __init__(self, end_column: int, criteria: FilterCriteria, sheet_name: str) -> None:
         self.criteria = criteria
-        super().__init__(f"ApplyFilters_{sheet_name}", end_column)
+        super().__init__(f"ApplyFilters_{macro_identifier(sheet_name)}", end_column)
 
     @property
     def body(self) -> str:

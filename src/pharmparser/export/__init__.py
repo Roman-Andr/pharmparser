@@ -3,8 +3,13 @@
 The layer splits three ways: :mod:`~pharmparser.export.grids` decides what every
 sheet contains (pure), :mod:`~pharmparser.export.xlsx_writer` puts that into an
 ``.xlsx`` with openpyxl (cross-platform), and :mod:`~pharmparser.export.vba` adds
-the sort/filter buttons by driving Excel over COM (Windows only, and imported
-lazily so the rest stays importable everywhere).
+the sort/filter buttons.
+
+That last step used to require driving Excel over COM, which is what kept the
+macro-enabled report off Linux and out of CI. It is now ordinary OOXML packaging:
+the VBA project is compiled by :mod:`~pharmparser.export.vba.ovba` and stapled on
+by :mod:`~pharmparser.export.vba.xlsm`, so the ``.xlsm`` builds anywhere. The COM
+injector is kept for Windows users who prefer Excel itself to write the file.
 """
 
 from __future__ import annotations
@@ -28,15 +33,24 @@ def write_workbook(settings: ExportSettings, table: PriceTable, path: Path) -> P
     return write_grids(build_grids(settings, table), path, settings.title)
 
 
-def export_with_macros(settings: ExportSettings, table: PriceTable, path: Path | None = None) -> Path:
-    """Write the macro-enabled ``.xlsm``. Requires Excel, so Windows only.
+def export_with_macros(
+    settings: ExportSettings,
+    table: PriceTable,
+    path: Path | None = None,
+    use_excel: bool = False,
+) -> Path:
+    """Write the macro-enabled ``.xlsm``.
 
-    The workbook is built and injected inside a temporary directory next to the
-    target, then moved over it in one step: the reader either sees the previous
-    report or the new one, never a half-written chain of ``0data.xlsm``,
-    ``1data.xlsm``, … left behind in the working directory (B12).
+    Pure Python by default, so this runs on any platform. Pass ``use_excel`` to go
+    through the COM injector instead, which needs Windows, Excel, and the Trust
+    Center's "Trust access to the VBA project object model".
+
+    The workbook is built inside a temporary directory next to the target and moved
+    over it in one step: the reader either sees the previous report or the new one,
+    never a half-written chain of ``0data.xlsm``, ``1data.xlsm``, … left behind in
+    the working directory (B12).
     """
-    from .vba import buttons_for, inject, replace_atomically
+    from .vba import buttons_for, replace_atomically
 
     target = Path(path or settings.macro_file_name).absolute()
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -46,11 +60,32 @@ def export_with_macros(settings: ExportSettings, table: PriceTable, path: Path |
     # Same directory as the target so the final replace stays on one filesystem.
     with tempfile.TemporaryDirectory(dir=target.parent, prefix=".pharmparser-") as scratch:
         plain = write_grids(grids, Path(scratch) / "report.xlsx", settings.title)
-        built = inject(plain, Path(scratch) / "report.xlsm", sheets, replaces=target)
+        built = Path(scratch) / "report.xlsm"
+        if use_excel:
+            from .vba import inject
+
+            inject(plain, built, sheets, replaces=target)
+        else:
+            _package_macros(plain, built, grids, sheets)
         replace_atomically(built, target)
 
     logger.info("Wrote %s", target)
     return target
+
+
+def _package_macros(plain: Path, built: Path, grids, sheets) -> Path:
+    """Compile the macros and staple them onto ``plain`` without Excel."""
+    from .vba.ovba import build_project
+    from .vba.source import MODULE_NAME, module_source
+    from .vba.xlsm import ButtonSpec, package
+
+    titles = [grid.title for grid in grids]
+    project = build_project({MODULE_NAME: module_source(sheets)}, titles)
+    specs = {
+        title: [ButtonSpec(button.cell_address, button.caption, button.macro.name) for button in buttons]
+        for title, buttons in sheets.items()
+    }
+    return package(plain, built, project, specs, titles)
 
 
 class XlsxExporter:
@@ -66,32 +101,40 @@ class XlsxExporter:
 
 
 class MacroExporter:
-    """Macro-enabled ``.xlsm`` with the VBA sort/filter buttons. Needs Excel."""
+    """Macro-enabled ``.xlsm`` with the VBA sort/filter buttons.
+
+    Builds anywhere; ``use_excel`` opts into the Windows-only COM injector.
+    """
 
     suffix = ".xlsm"
+
+    def __init__(self, use_excel: bool = False) -> None:
+        self.use_excel = use_excel
 
     def default_path(self, settings: ExportSettings) -> Path:
         return Path(settings.macro_file_name)
 
     def export(self, settings: ExportSettings, table: PriceTable, path: Path | None = None) -> Path:
-        return export_with_macros(settings, table, path or self.default_path(settings))
+        return export_with_macros(
+            settings, table, path or self.default_path(settings), use_excel=self.use_excel
+        )
 
 
-def select_exporter(macros: bool = True) -> Exporter:
-    """The best backend available here.
+def select_exporter(macros: bool = True, use_excel: bool = False) -> Exporter:
+    """The backend to use here.
 
-    Falls back to the plain ``.xlsx`` — with a warning rather than a failure — when
-    the macro buttons were wanted but Excel cannot be driven on this machine.
+    The macro path no longer depends on the platform, so this only falls back when
+    macros were not asked for, or when the caller specifically wanted Excel to do
+    the writing and Excel is not available.
     """
     if not macros:
         return XlsxExporter()
-    if supports_excel_macros():
+    if use_excel and not supports_excel_macros():
+        logger.warning(
+            "Excel cannot be driven on this machine; building the .xlsm in Python instead"
+        )
         return MacroExporter()
-    logger.warning(
-        "The macro buttons need Excel driven over COM, which is Windows only; "
-        "writing a plain .xlsx instead"
-    )
-    return XlsxExporter()
+    return MacroExporter(use_excel=use_excel)
 
 
 __all__ = [

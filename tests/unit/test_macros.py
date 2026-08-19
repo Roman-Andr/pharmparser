@@ -6,6 +6,8 @@ in ``__init__``, but ``position_codes`` is only filled later by ``Button.create(
 so the button save/restore geometry never reached the workbook.
 """
 
+import pytest
+
 from pharmparser.export.vba import (
     ApplyFiltersMacro,
     FilterCriteria,
@@ -13,14 +15,15 @@ from pharmparser.export.vba import (
     SortMacro,
     SortOrder,
 )
+from pharmparser.export.vba.macros import macro_identifier
 
 
 def test_sort_macro_emits_single_line_sort_statement() -> None:
     macro = SortMacro("D", 6, SortOrder.ASCENDING, "Data")
-    assert macro.name == "SortASCENDINGD_Data"
+    assert macro.name == "SortASCENDINGD_data"
     assert 'ActiveSheet.Range("A3:F100000").Sort Key1:=ActiveSheet.Columns("D"), ' \
            "Order1:=xlAscending, Header:=xlYes" in macro.code
-    assert "Sub SortASCENDINGD_Data()" in macro.code
+    assert "Sub SortASCENDINGD_data()" in macro.code
 
 
 def test_remove_filters_macro_clears_every_diff_column() -> None:
@@ -67,4 +70,26 @@ def test_every_macro_renders_registered_geometry() -> None:
 
 
 def test_a_macro_without_buttons_still_renders() -> None:
-    assert "Sub RemoveFilters_Data()" in RemoveFiltersMacro(6, "Data").code
+    assert "Sub RemoveFilters_data()" in RemoveFiltersMacro(6, "Data").code
+
+
+def test_macro_names_are_ascii_even_for_russian_sheets() -> None:
+    """Module streams live in the project code page, so a Cyrillic Sub name is mojibake."""
+    macro = ApplyFiltersMacro(6, FilterCriteria.GREATER_THAN_ZERO, "Данные")
+    assert macro.name == "ApplyFilters_dannye"
+    assert macro.code.isascii()
+
+
+@pytest.mark.parametrize(
+    ("sheet", "expected"),
+    [("Данные", "dannye"), ("Проценты", "protsenty"), ("Анализ", "analiz"),
+     ("Sheet 1", "sheet_1"), ("Ц/Ч", "ts_ch"), ("", "Sheet")],
+)
+def test_macro_identifier_transliterates(sheet: str, expected: str) -> None:
+    assert macro_identifier(sheet) == expected
+
+
+def test_a_prologue_is_rendered_inside_the_sub() -> None:
+    macro = RemoveFiltersMacro(6, "Data")
+    macro.prologue = "PIN_MARKER"
+    assert "PIN_MARKER" in macro.code

@@ -175,7 +175,7 @@ def test_the_macro_export_runs_over_the_real_profile(
     config = load_config(config_file)
     table = asyncio.run(scrape_profile(config.request, config.profiles[0].pharmacies))
 
-    target = export_with_macros(config.settings, table, tmp_path / "data.xlsm")
+    target = export_with_macros(config.settings, table, tmp_path / "data.xlsm", use_excel=True)
 
     assert len(excel_sessions) == 1
     assert [path.name for path in tmp_path.iterdir()] == ["config.json", "data.xlsm"]

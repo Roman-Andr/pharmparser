@@ -28,7 +28,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--macros",
         action="store_true",
-        help="also inject the VBA sort/filter buttons and produce an .xlsm (Windows only)",
+        help="also add the VBA sort/filter buttons and produce an .xlsm",
+    )
+    parser.add_argument(
+        "--use-excel",
+        action="store_true",
+        help="build the .xlsm by driving Excel over COM instead of in Python (Windows only)",
     )
     parser.add_argument(
         "--cache",
@@ -46,7 +51,8 @@ def main(argv: list[str] | None = None) -> int:
         logger.debug("Logging to %s", log_file)
 
     try:
-        controller = Controller.load(args.config, exporter=select_exporter(macros=args.macros))
+        exporter = select_exporter(macros=args.macros, use_excel=args.use_excel)
+        controller = Controller.load(args.config, exporter=exporter)
         profile = controller.select_profile(args.profile)
         logger.info("Parsing profile %r (%d pharmacies)", profile.name, len(profile.scrapable))
 

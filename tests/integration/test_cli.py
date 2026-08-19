@@ -1,6 +1,7 @@
 """End-to-end run of the CLI against a real price endpoint on localhost."""
 
 import json
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -100,15 +101,25 @@ def test_env_cookie_reaches_the_request(
     assert all("from-env" in request.cookie for request in two_pharmacies.requests)
 
 
-@pytest.mark.skipif(supports_excel_macros(), reason="Excel is available, so macros are not skipped")
-def test_macros_flag_degrades_gracefully_off_windows(
+def test_macros_flag_produces_an_xlsm_without_excel(
+    config_file: Path, tmp_path: Path, two_pharmacies: FakeEndpoint
+) -> None:
+    """The macro report no longer needs Windows: this runs on the CI Linux box."""
+    output = tmp_path / "report.xlsm"
+    assert main(["--config", str(config_file), "--output", str(output), "--macros"]) == 0
+    assert output.exists()
+    assert "xl/vbaProject.bin" in zipfile.ZipFile(output).namelist()
+
+
+@pytest.mark.skipif(supports_excel_macros(), reason="Excel is available, so nothing degrades")
+def test_use_excel_falls_back_when_excel_is_absent(
     config_file: Path, tmp_path: Path, two_pharmacies: FakeEndpoint, caplog: pytest.LogCaptureFixture
 ) -> None:
-    output = tmp_path / "report.xlsx"
+    output = tmp_path / "report.xlsm"
     with caplog.at_level("WARNING"):
-        assert main(["--config", str(config_file), "--output", str(output), "--macros"]) == 0
+        assert main(["--config", str(config_file), "--output", str(output), "--macros", "--use-excel"]) == 0
     assert output.exists()
-    assert "Windows only" in caplog.text
+    assert "Excel cannot be driven" in caplog.text
 
 
 def test_cache_flag_reuses_a_cached_run(

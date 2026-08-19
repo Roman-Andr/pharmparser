@@ -525,6 +525,7 @@ Everything was moved to its latest release, which surfaced three problems worth 
    though the macro step itself only runs on Windows. Cross-platform support is a test-suite
    and CI concern, not a user-facing feature. Phase 3 keeps the VBA layer and fixes B1/B12
    inside it instead of deleting it.
+   *Superseded 2026-08-19 (decision 8): the `.xlsm` is now built without Excel at all.*
 2. **A headless CLI will be added.** `pharmparser.cli` becomes the end-to-end path exercised in
    CI, and makes the scrape/export pipeline scriptable. *Done:* `pharmparser-cli`, covered by
    `tests/integration/test_cli.py`, which runs the whole pipeline against a faked endpoint.
@@ -538,3 +539,57 @@ Everything was moved to its latest release, which surfaced three problems worth 
    wording rather than as keys pointing somewhere else.
 7. **B16 is fixed by appending the manufacturer to the item label**, keeping the report's
    layout untouched — no new column, and the first column still sorts by drug name.
+
+
+---
+
+## 7. Phase 7 — building the .xlsm without Excel (2026-08-19)
+
+### 8. The macro export no longer requires Windows
+
+Decision 1 assumed the `.xlsm` could only be produced by driving Excel over COM, which
+left the project's actual deliverable untestable in CI and unbuildable for anyone
+without a Windows machine and a licensed Excel. That assumption no longer holds.
+
+Producing a macro-enabled workbook needs three things, and none of them needs Excel:
+
+1. **The compiled VBA project.** `vbaProject.bin` is an OLE compound file holding
+   MS-OVBA–compressed module streams. `pharmparser.export.vba.ovba` builds it: the
+   container comes from the `ms-ovba` package, the compression from
+   `ovba/compression.py`.
+2. **The buttons.** They are Excel form controls, stored as a legacy VML drawing per
+   sheet. `pharmparser.export.vba.xlsm` writes those, wires the relationships, and
+   flips the workbook's content type to macro-enabled.
+3. **ASCII macro names.** Module streams are stored in the project's code page, so
+   `Sub ApplyFilters_Данные()` comes back as mojibake. `macro_identifier()`
+   transliterates the sheet title: `ApplyFilters_dannye`.
+
+**Why the compression is ours.** `ms-ovba` 0.0.1 is the only published pure-Python
+encoder. It produces a structurally valid container, and then silently corrupts module
+text past roughly 2 KB — the divergence sits at a fixed offset of ~2072 bytes
+regardless of input length, which is the CopyToken bit-split boundary at decompressed
+offset 2048. Its output is also not byte-reproducible between runs. Measured:
+
+| module source | round-trip through oletools |
+| --- | --- |
+| 1827 B | identical |
+| 2075 B | identical |
+| 2126 B | **corrupt from byte 2072** |
+| 3027 B | **corrupt from byte 2072** |
+
+Every module this project generates is larger than that: three sheets and eight
+competitors is ~9.5 KB. `ovba/compression.py` replaces that encoder;
+`tests/unit/test_ovba_compression.py` round-trips its output through oletools'
+independent decoder, including a fuzz sweep across the 2048 boundary and the
+incompressible short-chunk case that must not be zero-padded to 4096.
+
+**What is verified, and what is not.** On Linux, with no Excel: the container is a
+valid OLE file with the expected streams; oletools decompiles the exact source back
+out; the `.xlsm` has the right content types, relationships and VML; every button
+references a `Sub` that is actually compiled in; and LibreOffice Calc opens the
+workbook and reads it correctly. What no Linux box can prove is that Excel itself
+compiles and runs the macros — that needs one click on a Windows machine. If it turns
+out not to, the COM path is still there behind `--use-excel`.
+
+**The COM injector stays**, opt-in via `--use-excel` / `MacroExporter(use_excel=True)`,
+still covered by `tests/integration/test_macro_export.py` against the fake Excel.

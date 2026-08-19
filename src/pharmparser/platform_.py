@@ -16,16 +16,18 @@ def is_windows() -> bool:
 
 
 def supports_excel_macros() -> bool:
-    """Whether the VBA macro buttons can be injected here.
+    """Whether Excel itself can be driven over COM here.
 
-    Needs Excel driven over COM, which means Windows with pywin32 installed.
+    This is *not* what the macro buttons need any more — the ``.xlsm`` is built in
+    Python and works everywhere. It only reports whether the opt-in ``--use-excel``
+    path is available, which means Windows with pywin32 installed.
     """
     if not is_windows():
         return False
     try:
         import win32com.client  # noqa: F401
     except ImportError:
-        logger.warning("pywin32 is not installed; the .xlsm macro buttons will be skipped")
+        logger.warning("pywin32 is not installed; Excel cannot be driven over COM here")
         return False
     return True
 

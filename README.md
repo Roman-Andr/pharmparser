@@ -10,7 +10,7 @@
 - Parse prices from many pharmacies at once, concurrently
 - Compare every price against a reference pharmacy, with colour-coded differences
 - Multi-profile support — save different pharmacy sets and switch between them
-- Export to `.xlsx` anywhere, or to `.xlsm` with VBA sort/filter buttons on Windows
+- Export to `.xlsx`, or to `.xlsm` with VBA sort/filter buttons — both on any platform
 - A GUI built with CustomTkinter, and a headless CLI running the same pipeline
 
 ---
@@ -20,8 +20,8 @@
 - Python 3.14+
 - [`uv`](https://github.com/astral-sh/uv)
 
-The package installs and runs on Linux, macOS and Windows. Only the macro buttons need
-Windows; everything else — scraping, analysis and the `.xlsx` export — is cross-platform.
+The package installs and runs on Linux, macOS and Windows, macro buttons included:
+the `.xlsm` is assembled in Python, so no Excel install is involved.
 
 ---
 
@@ -33,10 +33,11 @@ cd pharmparser
 uv sync
 ```
 
-> **Windows only:** writing the `.xlsm` workbook drives Excel over COM and adds a VBA
-> module, which needs Excel's *Trust access to the VBA project object model* setting.
-> Enable it under **File → Options → Trust Center → Trust Center Settings → Macro
-> Settings**. Without it the export fails with an opaque COM error.
+> The `.xlsm` is built in Python — no Excel needed. Excel still has to *trust* the
+> macros when you open the file: allow content when prompted, or unblock the file in
+> its file properties. Pass `--use-excel` to have Excel itself write the workbook
+> over COM instead (Windows only, and needs the Trust Center's "Trust access to the
+> VBA project object model").
 
 ---
 
@@ -125,7 +126,7 @@ The CLI runs the same pipeline:
 
 ```bash
 uv run pharmparser-cli --profile "Основной" --output report.xlsx
-uv run pharmparser-cli --macros    # also inject the VBA buttons (Windows)
+uv run pharmparser-cli --macros    # also add the VBA buttons (any platform)
 uv run pharmparser-cli --cache     # reuse this profile's cached prices
 uv run pharmparser-cli --help
 ```
@@ -149,7 +150,7 @@ dropped (about 1 % of rows).
 A blank difference cell means the comparison is undefined — one of the two pharmacies does
 not stock the item. That is distinct from a difference of `0`, which means the prices match.
 
-On Windows the two price sheets also carry buttons: **Apply Filters** / **Remove Filters**,
+With `--macros` the two price sheets also carry buttons: **Apply Filters** / **Remove Filters**,
 and an up/down pair over each difference column.
 
 ---
@@ -174,7 +175,7 @@ pharmparser/
 │   │   ├── grids.py           # pure sheet builders (content + layout)
 │   │   ├── xlsx_writer.py     # the only module that knows openpyxl
 │   │   ├── protocols.py       # the Exporter contract
-│   │   └── vba/               # Windows-only macro buttons, imported lazily
+│   │   └── vba/               # macro buttons: VBA compiler, .xlsm packer, COM injector
 │   ├── cache.py               # per-profile scrape cache
 │   ├── logging_.py            # console + rotating file logging
 │   ├── platform_.py           # OS capability probes
@@ -242,7 +243,7 @@ their bootloader aborts with *Failed to allocate PyConfig structure* on a 3.14 b
 | HTTP | `aiohttp` |
 | Parsing | `beautifulsoup4`, `lxml` |
 | Config | `pydantic`, `pydantic-settings` |
-| Export | `openpyxl`, `pywin32` (Windows COM/VBA) |
+| Export | `openpyxl`, `ms-ovba` (VBA project), `pywin32` (optional Windows COM) |
 | Packaging | `pyinstaller` |
 
 ---
