@@ -30,7 +30,8 @@ from collections.abc import Iterator, Sequence
 from concurrent.futures import BrokenExecutor, ProcessPoolExecutor
 from contextlib import contextmanager
 
-from .parser import parse_prices
+from ..domain import ProductPrice
+from .parser import parse_prices, parse_product_prices
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,19 @@ class ParsePool:
             # A worker killed mid-run, or a pipe torn down under us.
             logger.warning(_UNAVAILABLE, error)
             return parse_prices(pages)
+
+    async def parse_products(self, pages: Sequence[str]) -> list[ProductPrice]:
+        if self._workers < 2 or sum(map(len, pages)) < MIN_PARALLEL_BYTES:
+            return parse_product_prices(pages)
+        executor = self._ensure()
+        if executor is None:
+            return parse_product_prices(pages)
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(executor, parse_product_prices, list(pages))
+        except (BrokenExecutor, OSError, EOFError) as error:
+            logger.warning(_UNAVAILABLE, error)
+            return parse_product_prices(pages)
 
     def shutdown(self) -> None:
         if self._executor is not None:

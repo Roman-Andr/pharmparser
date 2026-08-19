@@ -1,10 +1,49 @@
-"""Where configuration and cache files live."""
+"""Platform-appropriate application paths and legacy compatibility paths."""
 
+import os
+import sys
 from pathlib import Path
 
 CONFIG_FILE_NAME = "config.json"
 EXAMPLE_FILE_NAME = "config.json.example"
 CACHE_FILE_NAME = "data.json"
+APP_NAME = "PharmParser"
+
+
+def roaming_config_dir() -> Path:
+    if sys.platform == "win32":
+        root = Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming"))
+    elif sys.platform == "darwin":
+        root = Path.home() / "Library/Application Support"
+    else:
+        root = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return root / APP_NAME
+
+
+def local_data_dir() -> Path:
+    if sys.platform == "win32":
+        root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local"))
+    elif sys.platform == "darwin":
+        root = Path.home() / "Library/Application Support"
+    else:
+        root = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+    return root / APP_NAME
+
+
+def settings_path() -> Path:
+    return roaming_config_dir() / "settings.json"
+
+
+def history_path() -> Path:
+    return local_data_dir() / "history.sqlite3"
+
+
+def reports_dir() -> Path:
+    return Path.home() / "Documents" / APP_NAME
+
+
+def modern_log_path() -> Path:
+    return local_data_dir() / "logs" / "pharmparser.log"
 
 
 def project_root() -> Path:

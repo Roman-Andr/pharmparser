@@ -1,7 +1,7 @@
 """Core domain model.
 
 Deliberately free of I/O and of every framework the app uses: no openpyxl, no
-customtkinter, no COM, no network. Everything here is directly unit-testable.
+UI toolkit, no COM, no network. Everything here is directly unit-testable.
 """
 
 from __future__ import annotations

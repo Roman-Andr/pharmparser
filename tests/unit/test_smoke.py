@@ -31,20 +31,16 @@ def test_enums_have_stable_values() -> None:
     assert SortOrder.ASCENDING.value == "xlAscending"
 
 
-def test_the_controller_imports_without_the_gui_toolkit() -> None:
-    """Phase 5: the use cases must not drag in customtkinter.
-
-    The controller sits above both front ends, and ``pharmparser.ui`` resolves its
-    widget classes lazily — which is what lets the whole pipeline be tested headless.
-    """
+def test_the_controller_and_web_adapter_import_without_a_gui_toolkit() -> None:
+    """Use cases and the HTTP adapter remain importable in a headless process."""
     import subprocess
     import sys
 
     script = (
         "import sys; from pharmparser.controller import Controller; "
-        "from pharmparser.cli import main; import pharmparser.ui; "
-        "assert Controller is not None and main is not None; "
-        "print('customtkinter' in sys.modules, 'tkinter' in sys.modules)"
+        "from pharmparser.cli import main; from pharmparser.web import create_app; "
+        "assert Controller is not None and main is not None and create_app is not None; "
+        "print('webview' in sys.modules, 'tkinter' in sys.modules)"
     )
     result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=True)
     assert result.stdout.strip() == "False False"

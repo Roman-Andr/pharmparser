@@ -5,6 +5,7 @@
 ```bash
 uv sync --all-groups     # runtime + dev + build dependencies
 uv run pre-commit install
+cd frontend && bun install
 ```
 
 Python 3.14 or newer. Everything except the Excel/COM macro step runs on Linux,
@@ -12,18 +13,16 @@ macOS and Windows, so you do not need Windows to work on this.
 
 ## The checks
 
-All three must pass before a commit:
+Backend and frontend checks must pass before a commit:
 
 ```bash
 uv run ruff check .
 uv run mypy
 uv run pytest
-```
-
-The GUI smoke tests need a display. They skip without one; on a headless machine:
-
-```bash
-xvfb-run -a uv run pytest
+cd frontend
+bun run generate:api
+bun run test
+bun run build
 ```
 
 ## Commit messages
@@ -100,7 +99,7 @@ The Release PR itself is a single commit either way, so merge it however you lik
 ## How the code is laid out
 
 The rule that keeps this testable: **the domain layer imports nothing from
-`openpyxl`, `customtkinter`, `win32com`, or the network.** In practice:
+`openpyxl`, FastAPI, React, `win32com`, or the network.** In practice:
 
 | If you are changing… | …the layer is | and it must not import |
 | --- | --- | --- |
@@ -108,15 +107,15 @@ The rule that keeps this testable: **the domain layer imports nothing from
 | what a sheet contains | `export/grids.py` | openpyxl |
 | how a workbook is written | `export/xlsx_writer.py` | COM, the network |
 | the macro buttons | `export/vba/` | anything at module scope from pywin32 |
-| what the app *does* | `controller.py` | a toolkit |
-| what the window *looks like* | `ui/` | business logic |
+| what the app *does* | `application/` | a UI toolkit |
+| local HTTP adaptation | `web/api.py` | domain implementation details |
 
 Two rules follow from that and are enforced by tests:
 
 - `pythoncom` and `win32com` are imported **inside functions**, never at module
   scope, so the package stays importable on Linux.
-- Importing `pharmparser.controller`, `pharmparser.cli` or `pharmparser.ui` must
-  not load `tkinter`. Widget classes resolve lazily through `ui/__init__.py`.
+- Importing `pharmparser.controller` or `pharmparser.cli` must not load a desktop
+  host. The FastAPI adapter remains outside the domain and scraping layers.
 
 ## Testing conventions
 

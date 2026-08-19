@@ -1,5 +1,5 @@
 from .client import ClientSessionFactory, PricePage, ScrapeError, TabletkaClient
-from .parser import DrugPrice, merge, parse_page, parse_price
+from .parser import DrugPrice, merge, parse_page, parse_price, parse_product_page, parse_product_prices
 from .protocols import PriceSource
 from .service import NoPharmaciesError, collect, scrape_profile
 
@@ -15,5 +15,7 @@ __all__ = [
     "merge",
     "parse_page",
     "parse_price",
+    "parse_product_page",
+    "parse_product_prices",
     "scrape_profile",
 ]

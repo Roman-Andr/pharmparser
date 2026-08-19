@@ -8,14 +8,16 @@ license = { text = "MIT" }
 dependencies = [
     "aiohttp>=3.14",
     "beautifulsoup4>=4.15",
-    "ctkmessagebox>=2.7",
-    "customtkinter>=6.0",
+    "fastapi>=0.116",
+    "keyring>=25.6",
     # lxml 6.0.1 was the first release shipping cp314 wheels.
     "lxml>=6.1.1",
     "ms-ovba>=0.0.1",
     "openpyxl>=3.1.5",
     "pydantic>=2.13",
     "pydantic-settings>=2.15",
+    "pywebview>=6.0",
+    "uvicorn>=0.35",
     # Excel macro injection (.xlsm buttons) is Windows-only; the rest of the
     # package must stay installable and testable everywhere.
     "pywin32>=312; sys_platform == 'win32'",
@@ -31,6 +33,7 @@ dev = [
     # than aioresponses, which patches aiohttp's internals and has no release
     # working with aiohttp 3.14.
     "mypy>=1.18",
+    "httpx>=0.28",
     "oletools>=0.60.2",
     "pre-commit>=4.3",
     "pytest>=9.0",

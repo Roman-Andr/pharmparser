@@ -11,6 +11,7 @@ import aiohttp
 from pydantic import BaseModel, Field
 
 from ..config import PharmacyEntry, RequestConfig
+from ..domain import ProductPrice
 from .parallel import ParsePool
 
 logger = logging.getLogger(__name__)
@@ -134,6 +135,16 @@ class TabletkaClient:
             for page in range(2, page_count + 1)
         ]
         return await self._parse_pool.parse([page.data for page in (first, *rest)])
+
+    async def product_prices_for(self, entry: PharmacyEntry) -> list[ProductPrice]:
+        """Fetch a pharmacy using the structured product representation."""
+        first = await self._post(entry.pharmacy_id, page=1, limit=PAGE_SIZE)
+        page_count = max(1, -(-first.price_count // PAGE_SIZE))
+        rest = [
+            await self._post(entry.pharmacy_id, page=page, limit=PAGE_SIZE)
+            for page in range(2, page_count + 1)
+        ]
+        return await self._parse_pool.parse_products([page.data for page in (first, *rest)])
 
 
 class ClientSessionFactory:

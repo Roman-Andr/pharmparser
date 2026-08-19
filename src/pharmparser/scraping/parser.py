@@ -31,6 +31,8 @@ from dataclasses import dataclass
 from lxml import html as lxml_html
 from lxml.etree import XPath, _Element
 
+from ..domain import Product, ProductPrice, parse_money
+
 logger = logging.getLogger(__name__)
 
 PRICE_SUFFIX = " р."
@@ -150,6 +152,45 @@ def parse_page(html: str) -> list[DrugPrice]:
     else:
         logger.debug("Read %d price(s) from %d result row(s)", len(prices), len(rows))
     return prices
+
+
+def parse_product_page(html: str) -> list[ProductPrice]:
+    """Structured counterpart of :func:`parse_page` for persistence and reports."""
+    if not html.strip():
+        return []
+    root = lxml_html.fromstring(html)
+    result: list[ProductPrice] = []
+    for row in _result_rows(root):
+        name = _select(row, _NAME, _NAME_FALLBACK)
+        price_text = _select(row, _PRICE, _PRICE_FALLBACK)
+        if not name or not price_text:
+            continue
+        match = _NUMBER.search(price_text.replace("\xa0", " "))
+        if match is None:
+            continue
+        form = _select(row, _FORM, _FORM_FALLBACK)
+        maker = _select(row, _MAKER, _MAKER_FALLBACK)
+        result.append(
+            ProductPrice(
+                Product(name=name, form=form, manufacturer=maker),
+                parse_money(match.group().replace(",", ".")),
+            )
+        )
+    return result
+
+
+def parse_product_prices(pages: Sequence[str]) -> list[ProductPrice]:
+    """Merge pages while refusing normalized-key collisions and silent overwrite."""
+    merged: dict[str, ProductPrice] = {}
+    for page in pages:
+        for entry in parse_product_page(page):
+            previous = merged.get(entry.product.key)
+            if previous is not None and previous.product != entry.product:
+                raise ValueError(
+                    f"product key collision: {previous.product.label!r} / {entry.product.label!r}"
+                )
+            merged[entry.product.key] = entry
+    return list(merged.values())
 
 
 def parse_prices(pages: Sequence[str]) -> dict[str, float]:

@@ -141,13 +141,19 @@ def _next_relationship_id(xml: str) -> str:
     return f"rId{max(used, default=0) + 1}"
 
 
-def _sheet_rels(target: str) -> str:
-    return (
-        f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        f'<Relationships xmlns="{RELATIONSHIPS_NS}">'
-        f'<Relationship Id="rId1" Type="{VML_RELATIONSHIP}" Target="{target}"/>'
-        f"</Relationships>"
-    )
+def _sheet_rels(target: str, existing: str | None = None) -> tuple[str, str]:
+    """Add a VML relationship without discarding table/drawing relationships."""
+    if existing is None:
+        identifier = "rId1"
+        xml = (
+            f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            f'<Relationships xmlns="{RELATIONSHIPS_NS}"></Relationships>'
+        )
+    else:
+        identifier = _next_relationship_id(existing)
+        xml = existing
+    relationship = f'<Relationship Id="{identifier}" Type="{VML_RELATIONSHIP}" Target="{target}"/>'
+    return xml.replace("</Relationships>", f"{relationship}</Relationships>"), identifier
 
 
 def _add_legacy_drawing(sheet_xml: str, relationship_id: str) -> str:
@@ -167,10 +173,10 @@ def _add_legacy_drawing(sheet_xml: str, relationship_id: str) -> str:
 
 
 def _ensure_relationship_namespace(sheet_xml: str) -> str:
-    if "xmlns:r=" in sheet_xml:
-        return sheet_xml
     opening = sheet_xml.index("<worksheet")
     end = sheet_xml.index(">", opening)
+    if "xmlns:r=" in sheet_xml[opening:end]:
+        return sheet_xml
     declaration = ' xmlns:r="' + OFFICE_RELATIONSHIPS_NS + '"'
     return sheet_xml[:end] + declaration + sheet_xml[end:]
 
@@ -202,8 +208,13 @@ def package(
         shape_id += len(specs)
 
         rels_part = f"xl/worksheets/_rels/{Path(part).name}.rels"
-        payloads[rels_part] = _sheet_rels(f"../drawings/vmlDrawing{index}.vml").encode()
-        payloads[part] = _add_legacy_drawing(payloads[part].decode(), "rId1").encode()
+        existing_rels = payloads.get(rels_part)
+        rels, relationship_id = _sheet_rels(
+            f"../drawings/vmlDrawing{index}.vml",
+            existing_rels.decode() if existing_rels is not None else None,
+        )
+        payloads[rels_part] = rels.encode()
+        payloads[part] = _add_legacy_drawing(payloads[part].decode(), relationship_id).encode()
 
     target.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as archive:

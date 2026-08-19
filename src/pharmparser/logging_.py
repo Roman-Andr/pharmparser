@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import logging.handlers
+import re
 from pathlib import Path
 
 LOG_FILE_NAME = "pharmparser.log"
@@ -22,6 +23,27 @@ FILE_FORMAT = "%(asctime)s %(levelname)-8s %(name)s %(filename)s:%(lineno)d — 
 PACKAGE = __name__.split(".")[0]
 
 logger = logging.getLogger(__name__)
+
+_SECRET_PATTERNS = (
+    re.compile(r'''(?i)(["']?cookie["']?\s*[:=]\s*["']?)([^"',}\r\n]+)'''),
+    re.compile(r'''(?i)(["']?authorization["']?\s*[:=]\s*["']?)([^"',}\r\n]+)'''),
+    re.compile(r'''(?i)(["']?(?:_?csrf|token)["']?\s*[:=]\s*["']?)([^"',}\r\n]+)'''),
+)
+
+
+def redact(value: object) -> str:
+    """Remove common credential fields from text before it reaches a handler."""
+    result = str(value)
+    for pattern in _SECRET_PATTERNS:
+        result = pattern.sub(r"\1<redacted>", result)
+    return result
+
+
+class SecretRedactionFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = redact(record.getMessage())
+        record.args = ()
+        return True
 
 
 class _OwnDebugOnly(logging.Filter):
@@ -60,6 +82,7 @@ def configure(
         stream = logging.StreamHandler()
         stream.setFormatter(logging.Formatter(CONSOLE_FORMAT))
         stream.setLevel(logging.DEBUG if verbose else logging.INFO)
+        stream.addFilter(SecretRedactionFilter())
         stream._pharmparser = True  # type: ignore[attr-defined]
         root.addHandler(stream)
 
@@ -77,6 +100,7 @@ def configure(
     rotating.setFormatter(logging.Formatter(FILE_FORMAT))
     rotating.setLevel(logging.DEBUG)
     rotating.addFilter(_OwnDebugOnly())
+    rotating.addFilter(SecretRedactionFilter())
     rotating._pharmparser = True  # type: ignore[attr-defined]
     root.addHandler(rotating)
     return target

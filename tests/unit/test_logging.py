@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from pharmparser.logging_ import BACKUP_COUNT, LOG_FILE_NAME, configure, log_path
+from pharmparser.logging_ import BACKUP_COUNT, LOG_FILE_NAME, configure, log_path, redact
 
 
 @pytest.fixture(autouse=True)
@@ -81,3 +81,11 @@ def test_the_log_lives_beside_the_configuration() -> None:
 
 def test_backups_are_kept() -> None:
     assert BACKUP_COUNT >= 1
+
+
+def test_secret_values_are_redacted_from_mapping_and_header_text() -> None:
+    value = "{'Cookie': 'session=abc; region=1', '_csrf': 'token-value', 'safe': 'visible'}"
+    cleaned = redact(value)
+    assert "session=abc" not in cleaned
+    assert "token-value" not in cleaned
+    assert "visible" in cleaned

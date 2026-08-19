@@ -9,34 +9,31 @@ rotating log file beside it is the only record of a run) and `pharmparser-cli`
 (headless, with a console). The CLI target needs no Tk, so running it is a
 complete check that the packaged import graph resolves, on any platform.
 
-customtkinter ships its themes and assets as data files that PyInstaller cannot
-see by following imports, so they are collected explicitly; the same goes for
-CTkMessagebox's icons. The entry points live in `packaging/` because PyInstaller
-runs its entry script as `__main__`, which would break the package's relative
-imports if it were aimed at `src/pharmparser/__main__.py` directly.
+The React production build is collected as package data. The entry points live in
+`packaging/` because PyInstaller runs its entry script as `__main__`.
 """
 
-from PyInstaller.utils.hooks import collect_data_files, copy_metadata
+from PyInstaller.utils.hooks import copy_metadata
 
 # The dist-info goes in so importlib.metadata can still answer __version__ inside
 # the frozen binary — which is what the updater compares against GitHub Releases.
 metadata = copy_metadata("pharmparser")
 
 datas = [
-    *collect_data_files("customtkinter"),
-    *collect_data_files("CTkMessagebox"),
     *metadata,
     ("config.json.example", "."),
+    ("src/pharmparser/web/static", "pharmparser/web/static"),
 ]
 
 hiddenimports = [
     # Reached only through lazy imports, so static analysis misses them.
     "pharmparser.export.vba.injector",
-    "pharmparser.ui.app",
-    "pharmparser.ui.entry",
-    "pharmparser.ui.profile",
-    "pharmparser.ui.profile_selector",
-    "pharmparser.ui.widgets",
+    "pharmparser.web.api",
+    "pharmparser.web.desktop",
+    "uvicorn.logging",
+    "uvicorn.loops.auto",
+    "uvicorn.protocols.http.auto",
+    "uvicorn.protocols.websockets.auto",
 ]
 
 a = Analysis(
@@ -48,7 +45,7 @@ a = Analysis(
     hookspath=[],
     runtime_hooks=[],
     # Nothing here imports these; excluding them keeps the binary from bloating.
-    excludes=["pandas", "numpy", "matplotlib", "pytest", "mypy", "ruff"],
+    excludes=["pandas", "numpy", "matplotlib", "pytest", "mypy", "ruff", "tkinter"],
     noarchive=False,
 )
 
@@ -84,7 +81,7 @@ cli_analysis = Analysis(
     hiddenimports=["pharmparser.export.vba.injector"],
     hookspath=[],
     runtime_hooks=[],
-    excludes=["pandas", "numpy", "matplotlib", "pytest", "mypy", "ruff", "tkinter", "customtkinter"],
+    excludes=["pandas", "numpy", "matplotlib", "pytest", "mypy", "ruff", "tkinter"],
     noarchive=False,
 )
 

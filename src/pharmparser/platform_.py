@@ -40,3 +40,12 @@ def open_file(path: Path) -> None:
         subprocess.run(["open", str(path)], check=False)
     else:
         subprocess.run(["xdg-open", str(path)], check=False)
+
+
+def open_folder(path: Path) -> None:
+    """Open the containing folder, selecting a file where the platform supports it."""
+    target = path if path.is_dir() else path.parent
+    if is_windows() and path.is_file():
+        subprocess.run(["explorer", "/select,", str(path)], check=False)
+    else:
+        open_file(target)

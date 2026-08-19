@@ -1,0 +1,6 @@
+export function HelpPage() { return <section><header className="page-title"><div><p className="eyebrow">СПРАВКА</p><h1>Помощь</h1><p>Короткие инструкции для первого запуска и диагностики.</p></div></header><div className="help-grid">
+  <article className="card"><h2>Как получить Cookie и CSRF</h2><ol><li>Откройте tabletka.by в браузере и войдите в нужный регион.</li><li>Откройте DevTools → Network.</li><li>Перейдите на страницу цен аптеки.</li><li>В запросе цен скопируйте заголовок Cookie и поле _csrf.</li><li>Вставьте значения в «Настройки».</li></ol></article>
+  <article className="card"><h2>Макросы Excel</h2><p>Файл XLSM содержит локальные кнопки сортировки и фильтрации. При первом открытии Excel может показать предупреждение. Разрешайте содержимое только у отчета, созданного PharmParser.</p></article>
+  <article className="card"><h2>Диагностика</h2><p>Логи находятся в локальном каталоге данных PharmParser. Cookie, CSRF и Authorization автоматически удаляются из журнальных сообщений.</p><p>При обращении в поддержку отправляйте только обезличенный журнал.</p></article>
+  <article className="card"><h2>Неполный отчет</h2><p>Он создается, только если загрузилась основная аптека и хотя бы один конкурент. Пропуски заметно отмечены на листах «Обзор» и «Проблемы» и не участвуют в трендах.</p></article>
+  </div></section>; }

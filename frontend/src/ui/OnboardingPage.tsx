@@ -1,0 +1,7 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { api } from "../api";
+export function OnboardingPage() {
+  const [step, setStep] = useState(1); const navigate = useNavigate(); const steps = ["Тема", "Учетные данные", "Профиль", "Проверка", "Папка отчетов"];
+  return <section><header className="page-title"><div><p className="eyebrow">ПЕРВЫЙ ЗАПУСК</p><h1>Настроим PharmParser</h1><p>Все можно изменить позднее в настройках.</p></div></header><ol className="steps">{steps.map((label, index) => <li className={index + 1 <= step ? "active" : ""} key={label}>{label}</li>)}</ol><div className="card onboarding"><h2>{steps[step - 1]}</h2>{step === 1 && <p>По умолчанию используется светлая тема. Темная тема доступна в настройках.</p>}{step === 2 && <p>Введите Cookie и CSRF на странице «Настройки». Они никогда не попадут в профиль или историю.</p>}{step === 3 && <p>Создайте профиль, добавьте минимум две аптеки и явно отметьте основную.</p>}{step === 4 && <p>Проверка подключения доступна после выбора основной аптеки.</p>}{step === 5 && <p>Выберите каталог и основной формат XLSM или XLSX.</p>}<div className="actions">{step > 1 && <button onClick={() => setStep(step - 1)}>Назад</button>}{step < 5 ? <button className="primary" onClick={() => setStep(step + 1)}>Далее</button> : <button className="primary" onClick={() => api("/settings", { method: "PATCH", body: JSON.stringify({ onboarding_complete: true }) }).then(() => navigate("/"))}>Завершить</button>}</div></div></section>;
+}
