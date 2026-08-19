@@ -39,9 +39,7 @@ def test_rows_are_sorted_case_insensitively(settings: ExportSettings, table: Pri
     ]
 
 
-def test_differences_are_signed_against_the_reference_pharmacy(
-    settings: ExportSettings, table: PriceTable
-) -> None:
+def test_differences_are_signed_against_the_reference_pharmacy(settings: ExportSettings, table: PriceTable) -> None:
     rows = data_rows(settings, table, absolute_difference)
     assert rows[3] == ["Аспирин, 100мг", 5.0, 6.5, 1.5, 7.0, 2.0]
     assert rows[5][:4] == ["Парацетамол, 500мг", 3.0, 2.5, -0.5]
@@ -51,9 +49,7 @@ def test_percentage_grid_is_relative(settings: ExportSettings, table: PriceTable
     assert data_rows(settings, table, percentage_difference)[3][3] == 30.0
 
 
-def test_missing_items_render_as_a_label_with_a_blank_difference(
-    settings: ExportSettings, table: PriceTable
-) -> None:
+def test_missing_items_render_as_a_label_with_a_blank_difference(settings: ExportSettings, table: PriceTable) -> None:
     """Regression for B9.
 
     A pharmacy that does not stock an item shows "Нет", and its difference column is
@@ -107,24 +103,71 @@ def test_single_pharmacy_grid_has_no_difference_columns(settings: ExportSettings
 
 def test_analysis_grid_reports_the_headline_metrics(settings: ExportSettings, table: PriceTable) -> None:
     rows = [list(row) for row in build_analysis_grid(settings, table).rows]
-    assert rows[0] == ["Аптека 1"]
-    assert rows[1] == ["Асортимент", 3]
-    assert rows[2] == ["Средний асортимент конкурентов", 2]
-    # Regression for B2: the float('-inf') sentinel used to force this to 0.
-    assert rows[3] == ["Позиций ниже всех", 2]
-    assert rows[4] == ["Уникальных позиций", 1]
-    assert rows[5] == ["", "Асортимент", "Дороже", "Дешевле", "Уникальных"]
-    assert rows[6] == ["Аптека 2", 2, 1, 1, 0]
-    assert rows[7] == ["Аптека 3", 2, 1, 0, 1]
+    assert rows[0] == ["АНАЛИЗ ЦЕН И АССОРТИМЕНТА"]
+    assert rows[1] == [
+        "Базовая аптека: Аптека 1",
+        None,
+        None,
+        None,
+        None,
+        None,
+        "Конкурентов",
+        None,
+        2,
+    ]
+    assert rows[4] == ["Ассортимент", 3, "Средняя цена, BYN", 3.33, "Дешевле всех", 1, "Только у нас", 1]
+    assert rows[5] == [
+        "Позиций на рынке",
+        4,
+        "Средний ассортимент конкурентов",
+        2,
+        "Общих с рынком",
+        2,
+        "Только у конкурентов",
+        1,
+    ]
+    assert rows[8] == [
+        "Сравнимых пар цен",
+        3,
+        "У нас дешевле",
+        2,
+        "У нас дороже",
+        1,
+        "Цена совпадает",
+        0,
+    ]
+    assert rows[9] == [
+        "Средняя разница, BYN",
+        1,
+        "Средняя разница, %",
+        17.78,
+        "Доля выгодных сравнений, %",
+        66.67,
+    ]
+    assert rows[13] == [
+        "Аптека",
+        "Ассортимент",
+        "Общие позиции",
+        "У нас дешевле",
+        "У нас дороже",
+        "Цена равна",
+        "Только у конкурента",
+        "Средняя цена, BYN",
+        "Разница, %",
+    ]
+    assert rows[14] == ["Аптека 2", 2, 2, 1, 1, 0, 0, 4.5, 6.67]
+    assert rows[15] == ["Аптека 3", 2, 1, 1, 0, 0, 1, 5.5, 40]
 
 
-def test_analysis_grid_has_no_header_row_and_so_no_autofilter(
-    settings: ExportSettings, table: PriceTable
-) -> None:
+def test_analysis_grid_has_no_header_row_and_so_no_autofilter(settings: ExportSettings, table: PriceTable) -> None:
     grid = build_analysis_grid(settings, table)
     assert grid.header_row is None
     assert grid.first_data_row is None
     assert grid.difference_columns == ()
+    assert grid.analysis_presentation is not None
+    assert grid.analysis_presentation.table_header_row == 14
+    assert grid.analysis_presentation.table_first_row == 15
+    assert grid.analysis_presentation.table_last_row == 16
 
 
 def test_analysis_sheet_is_named_after_settings_title(table: PriceTable) -> None:
