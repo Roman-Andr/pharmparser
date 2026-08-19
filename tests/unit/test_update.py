@@ -335,6 +335,9 @@ def test_restart_launches_the_new_binary_and_leaves(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(update.subprocess, "Popen", lambda argv, **kwargs: launched.append((argv, kwargs)))
     monkeypatch.setattr(update.sys, "argv", ["pharmparser", "--verbose"])
     monkeypatch.setenv("PHARMPARSER_RESTART_TEST", "preserved")
+    monkeypatch.setenv("_PYI_ARCHIVE_FILE", "old-pharmparser.exe")
+    monkeypatch.setenv("_PYI_PARENT_PROCESS_LEVEL", "1")
+    monkeypatch.setenv("_PYI_APPLICATION_HOME_DIR", "old-onefile-directory")
 
     target = tmp_path / "pharmparser.exe"
     with pytest.raises(SystemExit) as exit_info:
@@ -349,6 +352,7 @@ def test_restart_launches_the_new_binary_and_leaves(monkeypatch: pytest.MonkeyPa
     assert isinstance(environment, dict)
     assert environment["PHARMPARSER_RESTART_TEST"] == "preserved"
     assert environment["PYINSTALLER_RESET_ENVIRONMENT"] == "1"
+    assert not any(name.startswith("_PYI_") for name in environment)
 
 
 # -- release-please drives the version the updater compares -------------------
