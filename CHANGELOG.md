@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/Roman-Andr/pharmparser/compare/v0.3.0...v0.3.1) (2026-08-19)
+
+
+### Fixes
+
+* align analysis count with filters ([9eeba4d](https://github.com/Roman-Andr/pharmparser/commit/9eeba4d3926c649e8f02d6fdd48e57edd7afb252))
+
 ## [0.3.0](https://github.com/Roman-Andr/pharmparser/compare/v0.2.2...v0.3.0) (2026-08-19)
 
 
