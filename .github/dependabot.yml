@@ -1,0 +1,48 @@
+# Dependency updates open pull requests against `dev`, not `main`.
+#
+# Two consequences worth knowing, both from GitHub's side rather than this file:
+#
+#  * This file is only ever read from the default branch, so it lives on `main`
+#    even though every PR it produces targets `dev`.
+#  * Dependabot *security* updates ignore `target-branch` entirely — they are only
+#    ever raised against the default branch, and they do not pick up the commit
+#    message prefixes below. So a security bump arrives on `main` titled
+#    "Bump x from 1 to 2", which release-please does not recognise as a release. If
+#    one of those matters, retitle it before merging.
+#
+# The prefixes are what decide whether an update ships: `fix(deps)` cuts a patch
+# release, `chore` and `ci` change nothing. See CONTRIBUTING.md.
+version: 2
+
+updates:
+  # Runtime and dev dependencies, resolved through uv.lock.
+  - package-ecosystem: uv
+    directory: "/"
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "fix(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      # One PR a week for the safe bumps; majors still come in one at a time,
+      # because those are the ones worth reading a changelog for.
+      routine:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # The actions used by CI and the release workflow.
+  - package-ecosystem: github-actions
+    directory: "/"
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions:
+        patterns: ["*"]

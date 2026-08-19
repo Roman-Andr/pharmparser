@@ -43,6 +43,25 @@ to write the changelog, so the prefix on a commit is what ships it.
 A commit with no recognised prefix releases nothing and says nothing, so it is worth
 getting right. Write the body for someone reading `git log` a year from now.
 
+## Branches
+
+`main` is what releases. `dev` is where dependency updates collect: Dependabot opens
+its pull requests there rather than against `main`, so a week of routine bumps can be
+reviewed and merged forward together instead of one at a time.
+
+Feature work can go either way — straight to `main` for anything self-contained, via
+`dev` when it should ride along with the dependency bumps. Merging `dev` into `main`
+is what puts any of it into a release.
+
+Two things about Dependabot that are GitHub's behaviour, not ours:
+
+* `.github/dependabot.yml` is read from the default branch only, so it lives on
+  `main` even though every PR it opens targets `dev`.
+* **Security** updates ignore `target-branch`. They are raised against `main`, and
+  they do not carry the commit-message prefixes from that file — so one arrives
+  titled `Bump x from 1 to 2`, which release-please does not read as anything.
+  Retitle it to `fix(deps): …` before merging if it should cut a release.
+
 ## Merging
 
 The merge strategy decides what release-please sees, so it is a release decision
