@@ -205,6 +205,45 @@ and what each phase changed.
 
 ---
 
+## Releases and updating
+
+Tagged versions are published to [GitHub Releases](https://github.com/Roman-Andr/pharmparser/releases)
+with a Windows and a Linux binary of both the GUI and the CLI, plus a `SHA256SUMS`
+file and a build provenance attestation.
+
+To cut a release, bump `version` in `pyproject.toml`, then tag it to match:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+The workflow refuses the tag if it disagrees with `pyproject.toml`, so a release can
+never ship a binary that reports a different version than its tag.
+
+Merges to `main` do **not** create a release — CI uploads the binaries as workflow
+artifacts instead. Releases are the signal the auto-updater follows, so they are
+deliberate rather than automatic.
+
+### Updating
+
+The packaged app checks for a newer release shortly after it starts and offers it;
+it never replaces itself without being asked. The download is verified against the
+published `SHA256SUMS` before anything is run, and any release URL outside GitHub is
+refused. Running from a source checkout skips the check entirely.
+
+The headless binary can be asked directly, and installs nothing:
+
+```bash
+pharmparser-cli --check-update
+```
+
+> The binaries are **not code-signed**, so Windows SmartScreen warns on first run.
+> The checksum protects a download from corruption or tampering in transit; the trust
+> root is still GitHub account security, not a certificate. Signing needs a paid
+> certificate.
+
+---
+
 ## Development
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). The short version:

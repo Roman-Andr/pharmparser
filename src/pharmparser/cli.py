@@ -12,6 +12,7 @@ import sys
 from multiprocessing import freeze_support
 from pathlib import Path
 
+from . import __version__
 from .config import ConfigError
 from .controller import Controller
 from .export import select_exporter
@@ -41,8 +42,32 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="reuse this profile's cached prices when present, and cache the result",
     )
+    parser.add_argument("--version", action="version", version=f"pharmparser {__version__}")
+    parser.add_argument(
+        "--check-update",
+        action="store_true",
+        help="ask GitHub whether a newer release exists, then exit",
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="log every request")
     return parser
+
+
+def _report_update() -> int:
+    """Print whether a newer release exists. Never installs anything."""
+    from .update import RELEASES_PAGE, UpdateError, available_update
+
+    try:
+        release = available_update()
+    except UpdateError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+
+    if release is None:
+        print(f"pharmparser {__version__} is up to date")
+        return 0
+    print(f"pharmparser {release.version} is available (running {__version__})")
+    print(f"  {release.page_url or RELEASES_PAGE}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -50,6 +75,9 @@ def main(argv: list[str] | None = None) -> int:
     log_file = configure_logging(verbose=args.verbose)
     if log_file is not None:
         logger.debug("Logging to %s", log_file)
+
+    if args.check_update:
+        return _report_update()
 
     try:
         exporter = select_exporter(macros=args.macros, use_excel=args.use_excel)

@@ -16,11 +16,16 @@ runs its entry script as `__main__`, which would break the package's relative
 imports if it were aimed at `src/pharmparser/__main__.py` directly.
 """
 
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, copy_metadata
+
+# The dist-info goes in so importlib.metadata can still answer __version__ inside
+# the frozen binary — which is what the updater compares against GitHub Releases.
+metadata = copy_metadata("pharmparser")
 
 datas = [
     *collect_data_files("customtkinter"),
     *collect_data_files("CTkMessagebox"),
+    *metadata,
     ("config.json.example", "."),
 ]
 
@@ -75,7 +80,7 @@ cli_analysis = Analysis(
     ["packaging/cli_entry.py"],
     pathex=["src"],
     binaries=[],
-    datas=[("config.json.example", ".")],
+    datas=[*metadata, ("config.json.example", ".")],
     hiddenimports=["pharmparser.export.vba.injector"],
     hookspath=[],
     runtime_hooks=[],

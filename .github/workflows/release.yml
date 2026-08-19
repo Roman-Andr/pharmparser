@@ -1,0 +1,144 @@
+name: Release
+
+# Tags publish releases; merges to main do not.
+#
+# The auto-updater in the app follows the latest non-prerelease tag, so a release
+# is a deliberate "this build is ready" signal. Releasing every merge instead would
+# push work-in-progress binaries at users and make the version number meaningless —
+# CI already uploads a workflow artifact per push for testing those.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build a release for (e.g. v0.2.0)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Refuse early if the tag and pyproject disagree: shipping v0.2.0 with 0.1.0
+  # compiled inside would make the updater offer the same release forever.
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - id: check
+        shell: bash
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          declared=$(uv run --no-project python -c \
+            'import tomllib,pathlib;print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])')
+          if [ "$tag" != "v$declared" ]; then
+            echo "::error::tag $tag does not match pyproject version $declared (expected v$declared)"
+            exit 1
+          fi
+          echo "version=$declared" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows-x64
+            suffix: .exe
+          - os: ubuntu-latest
+            platform: linux-x64
+            suffix: ""
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Test
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a uv run pytest; else uv run pytest; fi
+
+      - name: Build
+        run: uv run pyinstaller --noconfirm pharmparser.spec
+
+      # --version proves copy_metadata() worked. Without it the frozen build reports
+      # 0.0.0+unknown, and the updater would never see a release as newer.
+      - name: Smoke-test the packaged binary
+        shell: bash
+        run: |
+          ./dist/pharmparser-cli${{ matrix.suffix }} --help
+          test "$(./dist/pharmparser-cli${{ matrix.suffix }} --version)" = "pharmparser ${{ needs.version.outputs.version }}"
+
+      - name: Name the assets
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          PLATFORM: ${{ matrix.platform }}
+          SUFFIX: ${{ matrix.suffix }}
+        run: |
+          mkdir -p release
+          cp "dist/pharmparser$SUFFIX" "release/pharmparser-$VERSION-$PLATFORM$SUFFIX"
+          cp "dist/pharmparser-cli$SUFFIX" "release/pharmparser-cli-$VERSION-$PLATFORM$SUFFIX"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: release-${{ matrix.os }}
+          path: release/
+          retention-days: 7
+
+  publish:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # create the release
+      id-token: write      # sign the provenance attestation
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release
+
+      # The updater refuses to install anything it cannot check against this file.
+      - name: Checksums
+        working-directory: release
+        run: sha256sum * | tee SHA256SUMS
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: release/pharmparser-*
+
+      # gh is preinstalled on the runner, so this needs no third-party action.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.version.outputs.tag }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          gh release create "$TAG" release/* \
+            --title "PharmParser $VERSION" \
+            --generate-notes \
+            --verify-tag

@@ -257,3 +257,68 @@ def test_closing_saves_the_edited_profiles(app, config_file: Path) -> None:
     assert list(saved["profiles"]) == ["Переименованный"]
     assert saved["settings"]["title"] == "Тест"
     assert saved["request"]["headers"]["Cookie"].startswith("PHPSESSID=")
+
+
+# -- updates -----------------------------------------------------------------
+
+
+def test_no_update_check_when_running_from_source(app, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replacing python.exe is not what anyone wants from a source checkout."""
+    looked: list[bool] = []
+    monkeypatch.setattr("pharmparser.update.running_frozen", lambda: False)
+    monkeypatch.setattr("pharmparser.update.available_update", lambda: looked.append(True))
+
+    app.check_for_update()
+
+    assert looked == []
+
+
+def test_a_failed_update_check_is_silent(app, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An unreachable GitHub must not interrupt a session that otherwise works."""
+    from pharmparser.update import UpdateError
+
+    shown: list[object] = []
+    monkeypatch.setattr("pharmparser.update.running_frozen", lambda: True)
+    monkeypatch.setattr("pharmparser.update.clean_superseded", lambda *a, **k: None)
+
+    def unreachable() -> None:
+        raise UpdateError("no network")
+
+    monkeypatch.setattr("pharmparser.update.available_update", unreachable)
+    monkeypatch.setattr(app, "offer_update", lambda release: shown.append(release))
+
+    app.check_for_update()
+    for _ in range(50):
+        app.update()
+        time.sleep(0.01)
+
+    assert shown == []
+
+
+def test_declining_an_update_installs_nothing(app, monkeypatch: pytest.MonkeyPatch) -> None:
+    from pharmparser.update import Release
+
+    installed: list[object] = []
+    monkeypatch.setattr("pharmparser.ui.app.CTkMessagebox", lambda **kwargs: _Answer("Later"))
+    monkeypatch.setattr(app, "install_update", lambda release: installed.append(release))
+
+    app.offer_update(
+        Release(
+            version="9.9.9",
+            tag="v9.9.9",
+            page_url="https://github.com/Roman-Andr/pharmparser/releases",
+            asset_name="pharmparser-9.9.9-windows-x64.exe",
+            asset_url="https://github.com/x",
+            checksums_url="https://github.com/y",
+        )
+    )
+
+    assert installed == []
+
+
+class _Answer:
+    def __init__(self, answer: str) -> None:
+        self._answer = answer
+
+    def get(self) -> str:
+        return self._answer

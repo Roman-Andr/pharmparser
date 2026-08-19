@@ -18,6 +18,8 @@ from ..config import Profile as ProfileConfig
 from ..controller import Controller
 from ..platform_ import open_file
 from ..scraping import NoPharmaciesError, ScrapeError
+from ..update import Release as Update
+from ..update import current_version
 from .profile import Profile
 from .profile_selector import ProfileSelector
 
@@ -25,6 +27,9 @@ logger = logging.getLogger(__name__)
 
 EXPECTED_FAILURES = (ConfigError, NoPharmaciesError, ScrapeError)
 """Errors with a message worth showing the user verbatim."""
+
+UPDATE_CHECK_DELAY_MS = 1500
+"""Let the window finish drawing before any of this touches the network."""
 
 
 class App(CTk):
@@ -42,6 +47,7 @@ class App(CTk):
         config: AppConfig | None = None,
         config_file: Path | None = None,
         controller: Controller | None = None,
+        check_for_updates: bool = True,
     ):
         super().__init__()
 
@@ -73,6 +79,77 @@ class App(CTk):
         self.cache_checkbox.grid(row=1, column=3, padx=10, pady=5)
 
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+        if check_for_updates:
+            self.after(UPDATE_CHECK_DELAY_MS, self.check_for_update)
+
+    # -- updates ---------------------------------------------------------------
+
+    def check_for_update(self) -> None:
+        """Ask GitHub, off the main thread, whether a newer release exists.
+
+        Nothing is installed without being asked for, and nothing here is allowed to
+        interrupt a session that is otherwise working: an unreachable GitHub, a rate
+        limit or an unreadable release all end at a log line.
+        """
+        from ..update import UpdateError, available_update, clean_superseded, running_frozen
+
+        if not running_frozen():
+            logger.debug("Running from source; skipping the update check")
+            return
+
+        clean_superseded()  # tidy away the binary a previous update replaced
+
+        def look() -> None:
+            try:
+                release = available_update()
+            except UpdateError as error:
+                logger.info("Update check failed: %s", error)
+                return
+            if release is not None:
+                self.after(0, self.offer_update, release)
+
+        Thread(target=look, daemon=True, name="update-check").start()
+
+    def offer_update(self, release: Update) -> None:
+        """Main thread: tell the user, and install only if they say so."""
+        answer = CTkMessagebox(
+            title="Update available",
+            message=(
+                f"PharmParser {release.version} is available.\n"
+                f"You are running {current_version()}.\n\n"
+                "Download and restart now?"
+            ),
+            icon="question",
+            option_1="Later",
+            option_2="Update",
+        )
+        if answer.get() != "Update":
+            return
+        self.install_update(release)
+
+    def install_update(self, release: Update) -> None:
+        from ..update import UpdateError, download, install, restart
+
+        self.progress.grid(row=1, column=4, padx=10, pady=5, sticky="ew")
+        self.progress.configure(mode="indeterminate")
+        self.progress.start()
+
+        def work() -> None:
+            try:
+                installed = install(download(release))
+            except (UpdateError, OSError) as error:
+                logger.warning("Update failed: %s", error)
+                self.after(0, self._update_failed, str(error))
+            else:
+                self.after(0, restart, installed)
+
+        Thread(target=work, daemon=True, name="update-install").start()
+
+    def _update_failed(self, message: str) -> None:
+        self.progress.stop()
+        self.progress.grid_forget()
+        CTkMessagebox(title="Update failed", message=message, icon="cancel")
 
     # -- entries ---------------------------------------------------------------
 
