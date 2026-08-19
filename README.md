@@ -249,6 +249,33 @@ pharmparser-cli --check-update
 
 ---
 
+## Troubleshooting
+
+**"the session looks expired"** — the cookies in `config.json` have a limited life,
+and this is the failure you will hit most often. Refresh the `Cookie` header and the
+`_csrf` value from DevTools (Network tab, any request the prices page makes) and run
+again. The app fails fast on this rather than retrying, so it takes about a second
+to find out.
+
+**"check the pharmacy URL"** — the endpoint answered 404 for that pharmacy id. The
+URL in the profile must end with the numeric id, as in
+`https://tabletka.by/pharmacies/3563`.
+
+**The report opened without the sort and filter buttons** — the workbook was written
+as `.xlsx` rather than `.xlsm`. Pass `--macros` on the CLI, and check the log for a
+line about the VBA project.
+
+**Excel warns about macros on first open** — expected. The workbook carries a VBA
+project, and Excel blocks macros in files downloaded from the internet until you
+allow the content, or unblock the file in its properties.
+
+**"Parse workers unavailable"** — parsing fell back to a single process, so the run
+is slower but correct. It happens when the app is embedded in a script with no
+`if __name__ == "__main__":` guard, because worker processes re-import the entry
+module.
+
+---
+
 ## Development
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). The short version:
