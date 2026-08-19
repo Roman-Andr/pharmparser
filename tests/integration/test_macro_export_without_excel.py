@@ -60,7 +60,10 @@ def test_each_sheet_links_its_legacy_drawing(report: Path) -> None:
     for index in (1, 2):
         rels = archive.read(f"xl/worksheets/_rels/sheet{index}.xml.rels").decode()
         assert "vmlDrawing" in rels
-        assert "<legacyDrawing" in archive.read(f"xl/worksheets/sheet{index}.xml").decode()
+        sheet = archive.read(f"xl/worksheets/sheet{index}.xml").decode()
+        assert "<legacyDrawing" in sheet
+        if "<tableParts" in sheet:
+            assert sheet.index("<legacyDrawing") < sheet.index("<tableParts")
 
 
 def test_every_button_points_at_a_macro_that_exists(report: Path, tmp_path: Path) -> None:

@@ -163,13 +163,26 @@ def _add_legacy_drawing(sheet_xml: str, relationship_id: str) -> str:
     ``r:id`` attribute has to bring it along; without that the part is not
     well-formed XML and Excel rejects the workbook.
     """
-    if "<legacyDrawing" in sheet_xml:
+    if re.search(r"<legacyDrawing(?:\s|>)", sheet_xml):
         return sheet_xml
 
     sheet_xml = _ensure_relationship_namespace(sheet_xml)
     tag = '<legacyDrawing r:id="' + relationship_id + '"/>'
-    # legacyDrawing must be the last child of worksheet.
-    return sheet_xml.replace("</worksheet>", tag + "</worksheet>")
+    # CT_Worksheet has a strict child order. In particular legacyDrawing comes
+    # before tableParts/extLst; appending it at the end produces well-formed XML
+    # that openpyxl accepts but desktop Excel repairs by deleting the worksheet.
+    following_tags = (
+        "legacyDrawingHF",
+        "picture",
+        "oleObjects",
+        "controls",
+        "webPublishItems",
+        "tableParts",
+        "extLst",
+    )
+    anchors = [position for name in following_tags if (position := sheet_xml.find(f"<{name}")) >= 0]
+    position = min(anchors, default=sheet_xml.index("</worksheet>"))
+    return sheet_xml[:position] + tag + sheet_xml[position:]
 
 
 def _ensure_relationship_namespace(sheet_xml: str) -> str:
