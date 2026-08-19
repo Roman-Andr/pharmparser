@@ -178,7 +178,7 @@ def test_the_macro_export_runs_over_the_real_profile(
     target = export_with_macros(config.settings, table, tmp_path / "data.xlsm", use_excel=True)
 
     assert len(excel_sessions) == 1
-    assert [path.name for path in tmp_path.iterdir()] == ["config.json", "data.xlsm"]
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["config.json", "data.xlsm"]
     workbook = excel_sessions[0].opened[0]
     # 8 competitors -> 8 difference columns -> 16 sort buttons plus the 2 filter ones.
     assert len(workbook.Sheets("Данные").Shapes.shapes) == 18
