@@ -9,6 +9,7 @@ from collections.abc import Mapping, Sequence
 from ..config import PharmacyEntry, RequestConfig
 from ..domain import Pharmacy, PriceTable
 from .client import ClientSessionFactory, ScrapeError
+from .parallel import parse_pool
 from .protocols import PriceSource
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,13 @@ async def scrape_profile(
     *,
     concurrency: int = DEFAULT_CONCURRENCY,
 ) -> PriceTable:
-    """Open a session and scrape one profile's worth of pharmacies."""
-    async with ClientSessionFactory(request) as client:
-        return await collect(client, entries, concurrency=concurrency)
+    """Open a session and scrape one profile's worth of pharmacies.
+
+    Parsing runs on a small process pool, because it is CPU-bound and would
+    otherwise serialise the whole scrape inside the event loop; see
+    :mod:`pharmparser.scraping.parallel`.
+    """
+    scrapable = sum(1 for entry in entries if entry.is_complete)
+    with parse_pool(scrapable) as pool:
+        async with ClientSessionFactory(request, parse_pool=pool) as client:
+            return await collect(client, entries, concurrency=concurrency)

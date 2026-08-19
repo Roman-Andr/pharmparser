@@ -11,14 +11,11 @@ import aiohttp
 from pydantic import BaseModel, Field
 
 from ..config import PharmacyEntry, RequestConfig
-from .parser import merge, parse_page
+from .parallel import ParsePool
 
 logger = logging.getLogger(__name__)
 
 PAGE_SIZE = 5000
-COUNT_PROBE_LIMIT = 10
-"""Rows requested by the first call, which only needs the total count."""
-
 DEFAULT_TIMEOUT = aiohttp.ClientTimeout(total=120, connect=15, sock_read=60)
 DEFAULT_RETRIES = 3
 DEFAULT_BACKOFF = 1.0
@@ -67,11 +64,13 @@ class TabletkaClient:
         config: RequestConfig,
         session: aiohttp.ClientSession,
         *,
+        parse_pool: ParsePool | None = None,
         retries: int = DEFAULT_RETRIES,
         backoff: float = DEFAULT_BACKOFF,
     ) -> None:
         self._config = config
         self._session = session
+        self._parse_pool = parse_pool or ParsePool(0)
         self._retries = retries
         self._backoff = backoff
 
@@ -120,26 +119,41 @@ class TabletkaClient:
         return f"pharmacy {pharmacy_id}: HTTP {error.status} {error.message}"
 
     async def prices_for(self, entry: PharmacyEntry) -> Mapping[str, float]:
-        """Fetch and parse every page of one pharmacy's price list."""
-        first = await self._post(entry.pharmacy_id, page=0, limit=COUNT_PROBE_LIMIT)
+        """Fetch and parse every page of one pharmacy's price list.
+
+        The first page carries ``priceCount`` itself, so there is no separate probe
+        request: asking for the count first cost an extra round trip per pharmacy
+        and told us nothing the page we needed anyway did not already say.
+        """
+        first = await self._post(entry.pharmacy_id, page=1, limit=PAGE_SIZE)
         page_count = max(1, -(-first.price_count // PAGE_SIZE))
         logger.info("%s: %d prices across %d page(s)", entry.name, first.price_count, page_count)
 
-        pages = [await self._post(entry.pharmacy_id, page=page, limit=PAGE_SIZE) for page in range(1, page_count + 1)]
-        return merge([parse_page(page.data) for page in pages])
+        rest = [
+            await self._post(entry.pharmacy_id, page=page, limit=PAGE_SIZE)
+            for page in range(2, page_count + 1)
+        ]
+        return await self._parse_pool.parse([page.data for page in (first, *rest)])
 
 
 class ClientSessionFactory:
     """Owns the aiohttp session so callers do not have to."""
 
-    def __init__(self, config: RequestConfig, *, timeout: aiohttp.ClientTimeout = DEFAULT_TIMEOUT) -> None:
+    def __init__(
+        self,
+        config: RequestConfig,
+        *,
+        parse_pool: ParsePool | None = None,
+        timeout: aiohttp.ClientTimeout = DEFAULT_TIMEOUT,
+    ) -> None:
         self._config = config
+        self._parse_pool = parse_pool or ParsePool(0)
         self._timeout = timeout
         self._session: aiohttp.ClientSession | None = None
 
     async def __aenter__(self) -> TabletkaClient:
         self._session = aiohttp.ClientSession(timeout=self._timeout)
-        return TabletkaClient(self._config, self._session)
+        return TabletkaClient(self._config, self._session, parse_pool=self._parse_pool)
 
     async def __aexit__(
         self,

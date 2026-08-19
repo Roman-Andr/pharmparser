@@ -593,3 +593,69 @@ out not to, the COM path is still there behind `--use-excel`.
 
 **The COM injector stays**, opt-in via `--use-excel` / `MacroExporter(use_excel=True)`,
 still covered by `tests/integration/test_macro_export.py` against the fake Excel.
+
+
+---
+
+## 8. Phase 8 — making a run fast (2026-08-19)
+
+Measured against the live endpoint with a real nine-pharmacy profile (9070 items).
+Total wall clock, config to finished `.xlsm`:
+
+| | total | scrape | xlsx | vba |
+| --- | ---: | ---: | ---: | ---: |
+| before | 100.4s | 95.6s | 4.1s | 0.4s |
+| lxml parser | 19.2s | 15.8s | 2.8s | 0.4s |
+| no count probe | 18.2s | 14.6s | 2.8s | 0.4s |
+| parallel parse | **11.4s** | **8.1s** | 2.7s | 0.4s |
+
+Where the time actually went, per pharmacy: 1.35s downloading, 1.37s of CPU. The
+CPU half was synchronous and ran inside the event loop, so it serialised the whole
+scrape — the measured network wait grew with queue position, 2.6s for the first
+pharmacy and 77.7s for the last.
+
+1. **The parser moved from BeautifulSoup to compiled lxml XPath.** 10.4s -> 2.4s on a
+   captured 4260-row page, byte-identical output.
+2. **The count probe went away.** The page response already carries `priceCount`, so
+   asking for it separately cost a round trip per pharmacy and said nothing new.
+3. **Parsing moved to a process pool** (`scraping/parallel.py`). Four workers on four
+   cores; eight measured slower.
+
+### What was measured and rejected
+
+* **Threads for parsing** — lxml holds the GIL during XPath: 0.48x on four cores.
+* **More concurrency** — 4, 8, 9, 12 and 16 all land within a second of each other.
+  The endpoint is the limit, not the client.
+* **gzip** — already on; responses arrive compressed and decompress to ~23 MB each.
+* **openpyxl `write_only`** — 2.8s -> 2.1s, but it complicates conditional
+  formatting for 0.7s. Not taken.
+
+### The floor
+
+Downloading all nine pharmacies concurrently, decoding nothing, takes 4.4s. With
+parsing spread over four cores the scrape is 8.1s, so roughly half of what is left
+is the endpoint itself. The remaining 2.7s of `.xlsx` writing is the next largest
+item, and openpyxl is most of it.
+
+### Keeping the pool from costing more than it saves
+
+Both guards exist because the first cut of this regressed things:
+
+* **Lazy, and only for big pages.** Workers start on the first pharmacy over
+  512 KB. Starting a pool per scrape regardless doubled the test suite's runtime
+  (11s -> 26s) and made a GUI timing test fail, because every fixture profile paid
+  for workers it had no use for.
+* **Proved before it is trusted.** Python 3.14 starts workers with `forkserver` on
+  Linux, which re-imports `__main__`; an embedding script with no
+  `if __name__ == "__main__"` guard takes them down. A warm-up task turns that into
+  one warning and an in-process parse, instead of one failure per pharmacy — which
+  is exactly what a live run did before the guard existed. `packaging/cli_entry.py`
+  gained the `freeze_support()` call the GUI entry already had.
+
+### Also fixed
+
+`_post` retried every failure three times with backoff, including 4xx. An expired
+session answers 400 and will keep answering 400, so a stale cookie cost five seconds
+and three requests to discover. 4xx now fails at once (408 and 429 excepted), and
+400/401/403 say the session looks expired and where to get fresh values rather than
+printing `400, message='Bad Request'`.

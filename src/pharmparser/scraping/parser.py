@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from lxml import html as lxml_html
@@ -149,6 +150,16 @@ def parse_page(html: str) -> list[DrugPrice]:
     else:
         logger.debug("Read %d price(s) from %d result row(s)", len(prices), len(rows))
     return prices
+
+
+def parse_prices(pages: Sequence[str]) -> dict[str, float]:
+    """Parse every page of one pharmacy and merge them into label -> price.
+
+    One top-level call doing all of a pharmacy's work, because this is what gets
+    handed to a worker process: sending the pages over once and getting a small
+    mapping back keeps the inter-process traffic to a minimum.
+    """
+    return merge([parse_page(page) for page in pages])
 
 
 def merge(pages: list[list[DrugPrice]]) -> dict[str, float]:

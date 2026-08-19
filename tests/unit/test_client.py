@@ -81,7 +81,7 @@ async def test_paginates_over_the_reported_count(
         await client.prices_for(entry)
     finally:
         await session.close()
-    assert [request.page for request in endpoint.requests] == ["0", "1", "2", "3"]
+    assert [request.page for request in endpoint.requests] == ["1", "2", "3"]
 
 
 async def test_uses_the_configured_url(entry: PharmacyEntry, endpoint: FakeEndpoint) -> None:
@@ -111,7 +111,7 @@ async def test_retries_then_succeeds(
         assert await client.prices_for(entry) == EXPECTED
     finally:
         await session.close()
-    assert len(endpoint.requests) == 3  # the failure, then the probe and the page
+    assert len(endpoint.requests) == 2  # the failure, then the page
 
 
 async def test_gives_up_after_the_retry_budget(
@@ -140,19 +140,20 @@ async def test_reports_the_pharmacy_in_the_error(
         await session.close()
 
 
-async def test_page_size_is_narrowed_for_the_count_probe(
+async def test_a_single_page_list_costs_exactly_one_request(
     request_config: RequestConfig, entry: PharmacyEntry, endpoint: FakeEndpoint
 ) -> None:
-    """The first call only needs the total, so it asks for 10 rows rather than 5000."""
+    """The page response carries priceCount, so no separate count probe is needed."""
     endpoint.serve_all("", price_count=0)
     client, session = await make_client(request_config)
     try:
         await client.prices_for(entry)
     finally:
         await session.close()
-    probe, full = endpoint.requests
-    assert "lim-result=10" in probe.cookie
-    assert "lim-result=5000" in full.cookie
+    assert len(endpoint.requests) == 1
+    assert "lim-result=5000" in endpoint.requests[0].cookie
+    assert endpoint.requests[0].page == "1"
+
 
 
 async def test_the_configured_form_fields_are_sent(
@@ -236,4 +237,4 @@ async def test_throttling_and_timeouts_are_still_retried(
         assert await client.prices_for(entry) == EXPECTED
     finally:
         await session.close()
-    assert len(endpoint.requests) == 3
+    assert len(endpoint.requests) == 2  # the rejection, then the page

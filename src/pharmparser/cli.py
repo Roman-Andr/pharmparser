@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from multiprocessing import freeze_support
 from pathlib import Path
 
 from .config import ConfigError
@@ -67,4 +68,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    freeze_support()
     raise SystemExit(main())

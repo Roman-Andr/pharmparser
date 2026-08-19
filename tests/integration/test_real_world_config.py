@@ -110,7 +110,7 @@ def test_browser_headers_survive_to_the_request(config_file: Path, tmp_path: Pat
     sent = served.requests[0]
     assert sent.headers["Content-Type"] == "application/x-www-form-urlencoded; charset=UTF-8"
     assert sent.headers["host"] == "tabletka.by"
-    assert "lim-result=10" in sent.cookie
+    assert "lim-result=5000" in sent.cookie
     assert {request.pharmacy_id for request in served.requests} >= {"3563"}
 
 
