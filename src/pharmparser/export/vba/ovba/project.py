@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -31,6 +32,30 @@ OFFICE_GUID = uuid.UUID("2DF8D04C5BFA101BBDE500AA0044DE52")
 
 class VbaBuildError(RuntimeError):
     """Raised when the VBA project could not be assembled."""
+
+
+def _patched_filetime() -> None:
+    """Stop ms-ovba crashing on Windows before it builds anything.
+
+    ``Filetime.from_msfiletime`` converts through ``datetime.timestamp()``, and on
+    Windows that raises ``OSError: [Errno 22]`` for any date before the Unix epoch.
+    The project's default date is 1601-01-01, the MS filetime zero, so *every*
+    ``VbaProject()`` call died there — the .xlsm built on Linux and not on the one
+    platform this app ships to.
+
+    The round trip is pointless as well as fragile: it takes a naive datetime out to
+    a local-time timestamp and back. Computing the datetime directly is exact.
+    """
+    from ms_dtyp.filetime import Filetime
+
+    def from_msfiletime(cls: type[Filetime], filetime: int) -> Filetime:
+        moment = datetime(1601, 1, 1) + timedelta(microseconds=filetime // 10)
+        return cls(
+            moment.year, moment.month, moment.day,
+            moment.hour, moment.minute, moment.second, moment.microsecond,
+        )
+
+    Filetime.from_msfiletime = classmethod(from_msfiletime)  # type: ignore[assignment]
 
 
 def _patched_compression() -> None:
@@ -74,6 +99,7 @@ def build(modules: dict[str, str], sheet_names: list[str] | None = None) -> byte
     except ImportError as e:  # pragma: no cover - dependency is declared
         raise VbaBuildError(f"ms-ovba is not installed: {e}") from e
 
+    _patched_filetime()
     _patched_compression()
 
     project = VbaProject()
