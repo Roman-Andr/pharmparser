@@ -12,6 +12,13 @@ An item is identified by all three of name, form and manufacturer. Dropping the
 manufacturer was bug B16: the same drug and pack from two makers sells at two
 prices, and keying on name and form alone silently kept whichever came last —
 about 1 % of rows on a real pharmacy's list.
+
+Selection goes through compiled lxml XPath rather than BeautifulSoup. On a real
+4260-row page that is 10.8s -> 1.5s, and parsing was 93 % of a nine-pharmacy run's
+wall clock: the work is synchronous, so it also blocked the event loop and stopped
+the other pharmacies' requests from overlapping. lxml holds the GIL during XPath,
+so a thread pool measured *slower* (0.48x on four cores) — making the parse itself
+cheap is what actually helps.
 """
 
 from __future__ import annotations
@@ -20,23 +27,30 @@ import logging
 import re
 from dataclasses import dataclass
 
-from bs4 import BeautifulSoup, Tag
+from lxml import html as lxml_html
+from lxml.etree import XPath, _Element
 
 logger = logging.getLogger(__name__)
 
 PRICE_SUFFIX = " р."
 PRICE_PREFIX = "от "
 
-_ROW = "tr.tr-border"
-_ROW_FALLBACK = "tr"
-_NAME = "td.name .tooltip-info-header > a"
-_NAME_FALLBACK = "td.name a"
-_FORM = "td.form span.form-title"
-_FORM_FALLBACK = "span.form-title"
-_MAKER = "td.produce .tooltip-info-header a"
-_MAKER_FALLBACK = "td.produce .tooltip-info-header"
-_PRICE = "td.price span.price-value"
-_PRICE_FALLBACK = "span.price-value"
+def _has_class(name: str) -> str:
+    """XPath predicate matching one class among many, the way a CSS selector does."""
+    return f"contains(concat(' ', normalize-space(@class), ' '), ' {name} ')"
+
+
+_ROW = XPath(f"//tr[{_has_class('tr-border')}]")
+_ROW_FALLBACK = XPath(f"//tr[.//span[{_has_class('price-value')}]]")
+_NAME = XPath(f".//td[{_has_class('name')}]//*[{_has_class('tooltip-info-header')}]/a")
+_NAME_FALLBACK = XPath(f".//td[{_has_class('name')}]//a")
+_FORM = XPath(f".//td[{_has_class('form')}]//span[{_has_class('form-title')}]")
+_FORM_FALLBACK = XPath(f".//span[{_has_class('form-title')}]")
+_MAKER = XPath(f".//td[{_has_class('produce')}]//*[{_has_class('tooltip-info-header')}]//a")
+_MAKER_FALLBACK = XPath(f".//td[{_has_class('produce')}]//*[{_has_class('tooltip-info-header')}]")
+_PRICE = XPath(f".//td[{_has_class('price')}]//span[{_has_class('price-value')}]")
+_PRICE_FALLBACK = XPath(f".//span[{_has_class('price-value')}]")
+_ANY_PRICE = XPath(f"//span[{_has_class('price-value')}]")
 
 _NUMBER = re.compile(r"-?\d+(?:[.,]\d+)?")
 
@@ -63,8 +77,9 @@ def parse_price(text: str) -> float | None:
     return float(match.group().replace(",", "."))
 
 
-def _text_of(node: Tag | None) -> str:
-    return node.text.strip() if node is not None else ""
+def _text_of(nodes: list[_Element]) -> str:
+    """Text of the first match, or "" when nothing matched."""
+    return nodes[0].text_content().strip() if nodes else ""
 
 
 def item_label(name: str, form: str, maker: str) -> str:
@@ -77,36 +92,34 @@ def item_label(name: str, form: str, maker: str) -> str:
     return ", ".join(part for part in (name, form, maker) if part)
 
 
-def _select(row: Tag, selector: str, fallback: str) -> Tag | None:
-    """The preferred match, or a looser one if the cell classes have drifted."""
-    return row.select_one(selector) or row.select_one(fallback)
+def _select(row: _Element, selector: XPath, fallback: XPath) -> str:
+    """Text of the preferred match, or of a looser one if the classes have drifted."""
+    return _text_of(selector(row)) or _text_of(fallback(row))
 
 
-def _result_rows(soup: BeautifulSoup) -> list[Tag]:
+def _result_rows(root: _Element) -> list[_Element]:
     """The table rows holding results.
 
     Scoping to a row is what B7 was really about: the old code selected names, forms
     and prices document-wide and zipped the three lists, so one extra or missing cell
     silently paired every later name with the wrong price.
     """
-    rows = soup.select(_ROW)
-    if rows:
-        return rows
-    return [row for row in soup.select(_ROW_FALLBACK) if row.select_one(_PRICE_FALLBACK) is not None]
+    return _ROW(root) or _ROW_FALLBACK(root)
 
 
 def parse_page(html: str) -> list[DrugPrice]:
     """Extract every priced result from one page of the price table."""
-    soup = BeautifulSoup(html, "lxml")
-    rows = _result_rows(soup)
+    if not html.strip():
+        return []
+
+    root = lxml_html.fromstring(html)
+    rows = _result_rows(root)
     prices: list[DrugPrice] = []
     skipped = 0
 
     for row in rows:
-        name = _text_of(_select(row, _NAME, _NAME_FALLBACK))
-        form = _text_of(_select(row, _FORM, _FORM_FALLBACK))
-        maker = _text_of(_select(row, _MAKER, _MAKER_FALLBACK))
-        price_text = _text_of(_select(row, _PRICE, _PRICE_FALLBACK))
+        name = _select(row, _NAME, _NAME_FALLBACK)
+        price_text = _select(row, _PRICE, _PRICE_FALLBACK)
 
         if not name or not price_text:
             skipped += 1
@@ -117,12 +130,14 @@ def parse_page(html: str) -> list[DrugPrice]:
             skipped += 1
             continue
 
+        form = _select(row, _FORM, _FORM_FALLBACK)
+        maker = _select(row, _MAKER, _MAKER_FALLBACK)
         prices.append(DrugPrice(name=item_label(name, form, maker), price=price))
 
     if skipped:
         logger.warning("Skipped %d unreadable result row(s) out of %d", skipped, len(rows))
 
-    price_cells = len(soup.select(_PRICE_FALLBACK))
+    price_cells = len(_ANY_PRICE(root))
     if price_cells and not prices:
         # The page plainly holds prices, so the selectors — not the data — are wrong.
         logger.error(

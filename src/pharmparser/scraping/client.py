@@ -23,6 +23,17 @@ DEFAULT_TIMEOUT = aiohttp.ClientTimeout(total=120, connect=15, sock_read=60)
 DEFAULT_RETRIES = 3
 DEFAULT_BACKOFF = 1.0
 
+RETRYABLE_STATUSES = frozenset({408, 429})
+"""4xx codes worth a second try. Every other 4xx is the request's own fault."""
+
+STALE_SESSION_STATUSES = frozenset({400, 401, 403})
+"""What the endpoint answers once the session cookies or the CSRF token expire."""
+
+STALE_SESSION_HINT = (
+    "the session looks expired — refresh the Cookie header and the _csrf value in your "
+    "config from the browser's DevTools (Network tab, any request to the prices page)"
+)
+
 
 class ScrapeError(Exception):
     """A pharmacy could not be scraped. Carries a message meant for the user."""
@@ -77,20 +88,36 @@ class TabletkaClient:
                 ) as response:
                     response.raise_for_status()
                     return PricePage.model_validate(await response.json(content_type=None))
+            except aiohttp.ClientResponseError as error:
+                # A 4xx will answer the same way however often it is asked; retrying
+                # only delays the report and hammers the endpoint.
+                if error.status < 500 and error.status not in RETRYABLE_STATUSES:
+                    raise ScrapeError(self._explain(pharmacy_id, error)) from error
+                last_error = error
             except (TimeoutError, aiohttp.ClientError, ValueError) as error:
                 last_error = error
-                if attempt == self._retries:
-                    break
-                delay = self._backoff * 2 ** (attempt - 1)
-                logger.warning(
-                    "Request for pharmacy %s page %d failed (%s); retrying in %.1fs",
-                    pharmacy_id, page, error, delay,
-                )
-                await asyncio.sleep(delay)
+
+            if attempt == self._retries:
+                break
+            delay = self._backoff * 2 ** (attempt - 1)
+            logger.warning(
+                "Request for pharmacy %s page %d failed (%s); retrying in %.1fs",
+                pharmacy_id, page, last_error, delay,
+            )
+            await asyncio.sleep(delay)
 
         raise ScrapeError(
             f"could not fetch prices for pharmacy {pharmacy_id} after {self._retries} attempts: {last_error}"
         ) from last_error
+
+    @staticmethod
+    def _explain(pharmacy_id: str, error: aiohttp.ClientResponseError) -> str:
+        """Turn a bare status code into something the user can act on."""
+        if error.status in STALE_SESSION_STATUSES:
+            return f"pharmacy {pharmacy_id}: HTTP {error.status} — {STALE_SESSION_HINT}"
+        if error.status == 404:
+            return f"pharmacy {pharmacy_id}: HTTP 404 — check the pharmacy URL in your config"
+        return f"pharmacy {pharmacy_id}: HTTP {error.status} {error.message}"
 
     async def prices_for(self, entry: PharmacyEntry) -> Mapping[str, float]:
         """Fetch and parse every page of one pharmacy's price list."""

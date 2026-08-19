@@ -192,3 +192,48 @@ def test_an_already_slashed_endpoint_is_left_alone() -> None:
 def test_a_query_string_stays_after_the_slash() -> None:
     config = RequestConfig(url=HttpUrl("https://example.test/prices?a=1"), headers={"Cookie": "x=1"})
     assert config.endpoint == "https://example.test/prices/?a=1"
+
+
+@pytest.mark.parametrize("status", [400, 401, 403])
+async def test_an_expired_session_fails_fast_and_says_so(
+    status: int, request_config: RequestConfig, entry: PharmacyEntry, endpoint: FakeEndpoint
+) -> None:
+    """These are what the endpoint answers with once the cookies or _csrf expire.
+
+    Retrying cannot help, and "400 Bad Request" on its own tells the user nothing.
+    """
+    endpoint.fail(status)
+    client, session = await make_client(request_config, retries=3)
+    try:
+        with pytest.raises(ScrapeError, match="session looks expired"):
+            await client.prices_for(entry)
+    finally:
+        await session.close()
+    assert len(endpoint.requests) == 1, "a 4xx must not be retried"
+
+
+async def test_a_wrong_pharmacy_url_points_at_the_config(
+    request_config: RequestConfig, entry: PharmacyEntry, endpoint: FakeEndpoint
+) -> None:
+    endpoint.fail(404)
+    client, session = await make_client(request_config, retries=3)
+    try:
+        with pytest.raises(ScrapeError, match="check the pharmacy URL"):
+            await client.prices_for(entry)
+    finally:
+        await session.close()
+    assert len(endpoint.requests) == 1
+
+
+@pytest.mark.parametrize("status", [429, 408])
+async def test_throttling_and_timeouts_are_still_retried(
+    status: int, request_config: RequestConfig, entry: PharmacyEntry, endpoint: FakeEndpoint
+) -> None:
+    endpoint.serve("111", PAGE_HTML, price_count=2)
+    endpoint.fail_next(status)
+    client, session = await make_client(request_config)
+    try:
+        assert await client.prices_for(entry) == EXPECTED
+    finally:
+        await session.close()
+    assert len(endpoint.requests) == 3
