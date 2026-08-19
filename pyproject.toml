@@ -1,6 +1,6 @@
 [project]
 name = "pharmparser"
-version = "0.1.0"
+version = "0.2.0"
 description = "Desktop app that scrapes and compares drug prices across tabletka.by pharmacies and exports a formatted Excel workbook."
 readme = "README.md"
 requires-python = ">=3.14"
