@@ -8,8 +8,9 @@ them untestable.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from statistics import mean
+
+from pydantic import BaseModel, ConfigDict
 
 from .models import Pharmacy, PriceTable
 
@@ -32,8 +33,7 @@ def percentage_difference(reference: float, other: float) -> float:
     return (other - reference) / reference * 100
 
 
-@dataclass(frozen=True, slots=True)
-class ComparisonRow:
+class ComparisonRow(BaseModel):
     """One item across every pharmacy.
 
     ``prices`` is parallel to ``PriceTable.pharmacies``; ``differences`` is parallel
@@ -42,13 +42,16 @@ class ComparisonRow:
     (B9: the old code wrote 0 for both).
     """
 
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     item: str
     prices: tuple[float | None, ...]
     differences: tuple[float | None, ...]
 
 
-@dataclass(frozen=True, slots=True)
-class CompetitorStats:
+class CompetitorStats(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     pharmacy: Pharmacy
     assortment: int
     shared: int
@@ -68,8 +71,9 @@ class CompetitorStats:
     """Mean competitor minus reference price for shared items, in percent."""
 
 
-@dataclass(frozen=True, slots=True)
-class MarketSummary:
+class MarketSummary(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     reference: Pharmacy
     assortment: int
     market_assortment: int

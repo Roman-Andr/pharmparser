@@ -16,8 +16,9 @@ import re
 import shutil
 import zipfile
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +40,10 @@ BUTTON_HEIGHT_POINTS = 18
 _CELL = re.compile(r"^([A-Z]+)(\d+)$")
 
 
-@dataclass(frozen=True, slots=True)
-class ButtonSpec:
+class ButtonSpec(BaseModel):
     """A form-control button anchored at ``cell`` that runs ``macro`` when clicked."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     cell: str
     caption: str
